@@ -1,6 +1,6 @@
 import numpy as np
 from gymnasium.spaces import Box
-from ..defs import Bounds
+from energy_net.defs import Bounds
 
 def assign_indexes(dict):
     """
@@ -14,8 +14,6 @@ def assign_indexes(dict):
     """
     index_mapping = {key: idx for idx, key in enumerate(dict.keys())}
     return index_mapping
-
-
 
 
 def observation_seperator(observation:dict[str, np.ndarray]):

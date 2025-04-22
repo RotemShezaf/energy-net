@@ -4,11 +4,11 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.callbacks import EvalCallback
-from energy_net.env.energy_net_v0 import EnergyNetV0
+from energy_net.envs.energy_net_v0 import EnergyNetV0
 from energy_net.market.pricing.pricing_policy import PricingPolicy
 from energy_net.market.pricing.cost_types import CostType
 from energy_net.dynamics.consumption_dynamics.demand_patterns import DemandPattern
-from energy_net.env.wrappers.stable_baselines_wrappers import StableBaselines3Wrapper
+from energy_net.envs.wrappers.stable_baselines_wrappers import StableBaselines3Wrapper
 import os
 
 def make_env():
