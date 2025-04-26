@@ -1,3 +1,20 @@
+import importlib
+import subprocess
+import sys
+
+def install_if_missing(package_name, import_name=None):
+    try:
+        importlib.import_module(import_name or package_name)
+    except ImportError:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
+
+# Example usage:
+install_if_missing("stable-baselines3[extra]", "stable_baselines3")
+install_if_missing("sb3-contrib", "sb3_contrib")
+install_if_missing("tensorboard")
+install_if_missing("pettingzoo")
+
+
 import gymnasium as gym
 import numpy as np
 from stable_baselines3 import PPO
@@ -10,6 +27,8 @@ from energy_net.market.pricing.cost_types import CostType
 from energy_net.dynamics.consumption_dynamics.demand_patterns import DemandPattern
 from energy_net.env.wrappers.stable_baselines_wrappers import StableBaselines3Wrapper
 import os
+
+
 
 def make_env():
     # Create the environment with required parameters
@@ -80,4 +99,5 @@ def main():
     eval_env.close()
 
 if __name__ == "__main__":
-    main() 
+
+    main()
