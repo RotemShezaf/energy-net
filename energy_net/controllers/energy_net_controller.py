@@ -24,12 +24,10 @@ separate environments and provides a more realistic simulation.
 """
 
 import numpy as np
-from gymnasium import spaces
-import logging
-import yaml
-import os
+#from gymnasium import spaces
 from typing import Dict, Any, Optional
 
+from energy_net.defs import Bounds
 from energy_net.utils.logger import setup_logger
 from energy_net.dynamics.consumption_dynamics.demand_patterns import calculate_demand
 from energy_net.market.pricing.cost_types import calculate_costs
@@ -268,7 +266,7 @@ class EnergyNetController:
                 return -np.inf
             return value
         
-        self.iso_observation_space = spaces.Box(
+        self.iso_observation_space = Bounds(
             low=np.array([
                 time_config.get('min', 0.0),
                 demand_config.get('min', 0.0),
@@ -296,7 +294,7 @@ class EnergyNetController:
         buy_price_config = pcs_obs_config.get('iso_buy_price', {})
         sell_price_config = pcs_obs_config.get('iso_sell_price', {})
         
-        self.pcs_observation_space = spaces.Box(
+        self.pcs_observation_space = Bounds(
             low=np.array([
                 battery_min,
                 pcs_time_config.get('min', 0.0),
@@ -323,7 +321,7 @@ class EnergyNetController:
         
         # PCS action space
         energy_config = self.pcs_unit_config['battery']['model_parameters']
-        self.pcs_action_space = spaces.Box(
+        self.pcs_action_space = Bounds(
             low=np.array([
                 -energy_config['discharge_rate_max']
             ], dtype=np.float32),

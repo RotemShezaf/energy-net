@@ -23,7 +23,7 @@ class Bounds:
     shape : tuple
         The shape of the bound space.
     """
-    def __init__(self, low: Any, high: Any, dtype: Any, shape: Any):
+    def __init__(self, low: Any, high: Any, dtype: Any, shape: Any="Box"):
         self.low = low
         self.high = high
         self.dtype = dtype

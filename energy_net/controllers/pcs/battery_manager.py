@@ -17,7 +17,6 @@ the PCS environment, with physically accurate constraints and behaviors.
 """
 
 from typing import Dict, Any, Optional, List, Tuple
-import numpy as np
 import logging
 from energy_net.components.pcsunit import PCSUnit
 
