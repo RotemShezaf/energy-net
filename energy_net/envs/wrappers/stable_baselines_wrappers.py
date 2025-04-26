@@ -1,5 +1,5 @@
 from gymnasium import spaces, ObservationWrapper, RewardWrapper, ActionWrapper, Wrapper
-from energy_net.env.energy_net_v0 import EnergyNetV0
+from energy_net.envs.energy_net_v0 import EnergyNetV0
 from typing import List, Dict, Any
 import numpy as np
 

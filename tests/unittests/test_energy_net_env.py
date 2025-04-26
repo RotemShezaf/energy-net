@@ -9,7 +9,7 @@ import gymnasium as gym
 from gymnasium import spaces
 
 
-from energy_net.env.energy_net_v0 import EnergyNetV0
+from energy_net.envs.energy_net_v0 import EnergyNetV0
 from energy_net.dynamics.consumption_dynamics.demand_patterns import DemandPattern
 from energy_net.market.pricing.cost_types import CostType
 from energy_net.market.pricing.pricing_policy import PricingPolicy
@@ -81,9 +81,9 @@ def _check_unsupported_spaces(env: gym.Env, observation_space: spaces.Space, act
 
 def _is_goal_env(env: gym.Env) -> bool:
     """
-    Check if the env uses the convention for goal-conditioned envs (previously, the gym.GoalEnv interface)
+    Check if the envs uses the convention for goal-conditioned envs (previously, the gym.GoalEnv interface)
     """
-    # We need to unwrap the env since gym.Wrapper has the compute_reward method
+    # We need to unwrap the envs since gym.Wrapper has the compute_reward method
     return hasattr(env.unwrapped, "compute_reward")
 
 
@@ -94,14 +94,14 @@ def _check_goal_env_obs(obs: dict, observation_space: spaces.Dict, method_name: 
     namely `observation`, `desired_goal`, and `achieved_goal`.
     """
     assert len(observation_space.spaces) == 3, (
-        "A goal conditioned env must contain 3 observation keys: `observation`, `desired_goal`, and `achieved_goal`."
+        "A goal conditioned envs must contain 3 observation keys: `observation`, `desired_goal`, and `achieved_goal`."
         f"The current observation contains {len(observation_space.spaces)} keys: {list(observation_space.spaces.keys())}"
     )
 
     for key in ["observation", "achieved_goal", "desired_goal"]:
         if key not in observation_space.spaces:
             raise AssertionError(
-                f"The observation returned by the `{method_name}()` method of a goal-conditioned env requires the '{key}' "
+                f"The observation returned by the `{method_name}()` method of a goal-conditioned envs requires the '{key}' "
                 "key to be part of the observation dictionary. "
                 f"Current keys are {list(observation_space.spaces.keys())}"
             )
@@ -172,10 +172,10 @@ def _check_spaces(env: gym.Env) -> None:
     assert hasattr(env, "action_space"), "You must specify an action space (cf gym.spaces)" + gym_spaces
 
     assert isinstance(env.observation_space, spaces.Space), (
-            "The observation space must inherit from gymnasium.spaces" + gym_spaces
+            "The observation space must inherit from gym.spaces" + gym_spaces
     )
     assert isinstance(env.action_space,
-                      spaces.Space), "The action space must inherit from gymnasium.spaces" + gym_spaces
+                      spaces.Space), "The action space must inherit from gym.spaces" + gym_spaces
 
     if _is_goal_env(env):
         assert isinstance(
@@ -205,9 +205,9 @@ def _check_box_obs(observation_space: spaces.Box, key: str = "") -> None:
 
 def _check_returned_values(env: gym.Env, observation_space: spaces.Space, action_space: spaces.Space) -> None:
     """
-    Check the returned values by the env when calling `.reset()` or `.step()` methods.
+    Check the returned values by the envs when calling `.reset()` or `.step()` methods.
     """
-    # because env inherits from gymnasium.Env, we assume that `reset()` and `step()` methods exists
+    # because envs inherits from gym.Env, we assume that `reset()` and `step()` methods exists
     reset_returns = env.reset()
     assert isinstance(reset_returns, tuple), "`reset()` must return a tuple (obs, info)"
     assert len(reset_returns) == 2, f"`reset()` must return a tuple of size 2 (obs, info), not {len(reset_returns)}"
@@ -353,7 +353,7 @@ def _check_env(env: gym.Env, warn: bool = True, skip_render_check: bool = True) 
 
     # # ==== Check the render method and the declared render modes ====
     # if not skip_render_check:
-    #     _check_render(env, warn)  # pragma: no cover
+    #     _check_render(envs, warn)  # pragma: no cover
 
     try:
         _check_for_nested_spaces(env.observation_space)
@@ -412,7 +412,7 @@ class TestEnergyNetEnv(unittest.TestCase):
         self.assertTrue(hasattr(self.env, 'observation_space'))
         self.assertTrue(hasattr(self.env, 'action_space'))
         
-        # Check that spaces are gymnasium spaces
+        # Check that spaces are gym spaces
         self.assertIsInstance(self.env.observation_space, spaces.Dict)
         self.assertIsInstance(self.env.action_space, spaces.Dict)
         

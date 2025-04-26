@@ -1,5 +1,4 @@
 from typing import Callable, Any, TypedDict, List, Dict, Tuple  # Add Tuple import
-import numpy as np
 import yaml
 import os
 
@@ -53,7 +52,9 @@ def move_time_tick(cur_time, cur_hour):
     return new_time, cur_hour 
 
 
-def load_config(self, config_path: str) -> dict:
+
+
+def load_config(config_path: str, bValidate:bool= False) -> Dict[str, Any]:
     """
     Loads and validates a YAML configuration file.
 
@@ -67,18 +68,23 @@ def load_config(self, config_path: str) -> dict:
         ValueError: If required parameters are missing or invalid.
     """
     if not os.path.exists(config_path):
-        raise FileNotFoundError(f"Configuration file not found at {config_path}")
+        # try the path from the project's root
+        from pathlib import Path
+        root_dir = Path(config_path).resolve().parent.parent.parent.parent  # adjust as needed
+        config_path = root_dir / config_path
+        if not os.path.exists(config_path):
+            raise FileNotFoundError(f"Configuration file not found at {config_path}")
     with open(config_path, 'r') as file:
         config = yaml.safe_load(file)
     
     # Example validation
-    required_energy_params = ['min', 'max', 'init', 'charge_rate_max', 'discharge_rate_max', 'charge_efficiency', 'discharge_efficiency']
-    for param in required_energy_params:
-        if param not in config.get('energy', {}):
-            raise ValueError(f"Missing energy parameter in config: {param}")
-    
-    # Add more validations as needed
-    
+    if bValidate:
+        required_energy_params = ['min', 'max', 'init', 'charge_rate_max', 'discharge_rate_max', 'charge_efficiency', 'discharge_efficiency']
+        for param in required_energy_params:
+            if param not in config.get('energy', {}):
+                raise ValueError(f"Missing energy parameter in config: {param}")
+
+
     return config
 
 

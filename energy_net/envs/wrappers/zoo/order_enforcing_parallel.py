@@ -9,7 +9,7 @@ class OrderEnforcingParallelWrapper(BaseParallelWrapper):
         super().__init__(env)
 
     def __getattr__(self, value: str) -> Any:
-        """Raises an error message when data is gotten from the env.
+        """Raises an error message when data is gotten from the envs.
 
         Should only be gotten after reset
         """

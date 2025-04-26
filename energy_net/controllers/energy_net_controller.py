@@ -24,12 +24,10 @@ separate environments and provides a more realistic simulation.
 """
 
 import numpy as np
-from gymnasium import spaces
-import logging
-import yaml
-import os
+#from gymnasium import spaces
 from typing import Dict, Any, Optional
 
+from energy_net.defs import Bounds
 from energy_net.utils.logger import setup_logger
 from energy_net.dynamics.consumption_dynamics.demand_patterns import calculate_demand
 from energy_net.market.pricing.cost_types import calculate_costs
@@ -45,7 +43,7 @@ from energy_net.components.pcsunit import PCSUnit
 from energy_net.model.rewards.base_reward import BaseReward
 from energy_net.model.rewards.cost_reward import CostReward
 from energy_net.model.rewards.iso_reward import ISOReward
-
+from energy_net.utils.utils import load_config
 
 
 class EnergyNetController:
@@ -120,9 +118,9 @@ class EnergyNetController:
         self.logger.info(f"Using cost type: {cost_type.value}")
 
         # Load configurations
-        self.env_config = self._load_config(env_config_path)
-        self.iso_config = self._load_config(iso_config_path)
-        self.pcs_unit_config = self._load_config(pcs_unit_config_path)
+        self.env_config = load_config(config_path=env_config_path)
+        self.iso_config = load_config(config_path=iso_config_path)
+        self.pcs_unit_config = load_config(config_path=pcs_unit_config_path)
 
         # Initialize shared state variables
         self.current_time = 0.0
@@ -167,14 +165,6 @@ class EnergyNetController:
         
         self.logger.info("EnergyNetController initialized successfully")
 
-    def _load_config(self, config_path: str) -> Dict[str, Any]:
-        """Load configuration from YAML file"""
-        try:
-            with open(config_path, 'r') as file:
-                return yaml.safe_load(file)
-        except Exception as e:
-            self.logger.error(f"Failed to load config from {config_path}: {e}")
-            raise
 
     def _init_iso_components(self, dispatch_config: Optional[Dict[str, Any]]):
         """Initialize ISO-specific components"""
@@ -276,7 +266,7 @@ class EnergyNetController:
                 return -np.inf
             return value
         
-        self.iso_observation_space = spaces.Box(
+        self.iso_observation_space = Bounds(
             low=np.array([
                 time_config.get('min', 0.0),
                 demand_config.get('min', 0.0),
@@ -304,7 +294,7 @@ class EnergyNetController:
         buy_price_config = pcs_obs_config.get('iso_buy_price', {})
         sell_price_config = pcs_obs_config.get('iso_sell_price', {})
         
-        self.pcs_observation_space = spaces.Box(
+        self.pcs_observation_space = Bounds(
             low=np.array([
                 battery_min,
                 pcs_time_config.get('min', 0.0),
@@ -331,7 +321,7 @@ class EnergyNetController:
         
         # PCS action space
         energy_config = self.pcs_unit_config['battery']['model_parameters']
-        self.pcs_action_space = spaces.Box(
+        self.pcs_action_space = Bounds(
             low=np.array([
                 -energy_config['discharge_rate_max']
             ], dtype=np.float32),

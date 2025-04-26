@@ -2,7 +2,7 @@ import gymnasium as gym
 from gymnasium import spaces, ObservationWrapper, RewardWrapper, ActionWrapper
 import numpy as np
 from typing import List
-from energy_net.env.energy_net_v0 import EnergyNetV0
+from energy_net.envs.energy_net_v0 import EnergyNetV0
 
 class FlattenActionWrapper(gym.ActionWrapper):
     def __init__(self, env):

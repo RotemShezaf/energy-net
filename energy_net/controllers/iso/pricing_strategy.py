@@ -24,7 +24,8 @@ import numpy as np
 import logging
 from abc import ABC, abstractmethod
 from energy_net.market.pricing.pricing_policy import PricingPolicy
-from gymnasium import spaces
+#from gymnasium import spaces
+from energy_net.defs import Bounds
 from energy_net.market.iso.quadratic_pricing_iso import QuadraticPricingISO
 
 class PricingStrategy(ABC):
@@ -61,7 +62,7 @@ class PricingStrategy(ABC):
         self.logger = logger
     
     @abstractmethod
-    def create_action_space(self, use_dispatch_action: bool = False) -> spaces.Space:
+    def create_action_space(self, use_dispatch_action: bool = False) -> Bounds:
         """
         Create the appropriate action space for this pricing strategy.
         
@@ -69,7 +70,7 @@ class PricingStrategy(ABC):
             use_dispatch_action: Whether to include dispatch in the action space
             
         Returns:
-            A gymnasium Space object representing the action space
+            A gym Space object representing the action space
         """
         pass
     
@@ -155,7 +156,7 @@ class QuadraticPricingStrategy(PricingStrategy):
         self.buy_iso = None
         self.sell_iso = None
     
-    def create_action_space(self, use_dispatch_action: bool = False) -> spaces.Space:
+    def create_action_space(self, use_dispatch_action: bool = False) -> Bounds:
         """
         Create the action space for quadratic pricing, optionally including dispatch.
         
@@ -180,7 +181,7 @@ class QuadraticPricingStrategy(PricingStrategy):
             low_array = np.full(6, self.low_poly, dtype=np.float32)
             high_array = np.full(6, self.high_poly, dtype=np.float32)
                 
-        return spaces.Box(
+        return Bounds(
             low=low_array,
             high=high_array,
             dtype=np.float32
@@ -350,7 +351,7 @@ class ConstantPricingStrategy(PricingStrategy):
         self.buy_iso = None
         self.sell_iso = None
     
-    def create_action_space(self, use_dispatch_action: bool = False) -> spaces.Space:
+    def create_action_space(self, use_dispatch_action: bool = False) -> Bounds:
         """
         Create the action space for constant pricing, optionally including dispatch.
         
@@ -369,7 +370,7 @@ class ConstantPricingStrategy(PricingStrategy):
             low_array = np.array([self.min_price, self.min_price], dtype=np.float32)
             high_array = np.array([self.max_price, self.max_price], dtype=np.float32)
         
-        return spaces.Box(
+        return Bounds(
             low=low_array,
             high=high_array,
             dtype=np.float32
@@ -531,7 +532,7 @@ class OnlinePricingStrategy(PricingStrategy):
     
 
     
-    def create_action_space(self, use_dispatch_action: bool = False) -> spaces.Space:
+    def create_action_space(self, use_dispatch_action: bool = False) -> Bounds:
         """
         Create the action space for online pricing, optionally including dispatch.
         
@@ -543,14 +544,14 @@ class OnlinePricingStrategy(PricingStrategy):
         """
         if use_dispatch_action:
             # Include dispatch in the action space
-            return spaces.Box(
+            return Bounds(
                 low=np.array([self.buy_price_min, self.sell_price_min, self.dispatch_min], dtype=np.float32),
                 high=np.array([self.buy_price_max, self.sell_price_max, self.dispatch_max], dtype=np.float32),
                 dtype=np.float32
             )
         else:
             # Only include buy/sell prices
-            return spaces.Box(
+            return Bounds(
                 low=np.array([self.buy_price_min, self.sell_price_min], dtype=np.float32),
                 high=np.array([self.buy_price_max, self.sell_price_max], dtype=np.float32),
                 dtype=np.float32

@@ -96,3 +96,9 @@ env = EnergyNetV0(
    - Profit from energy arbitrage
    - Buy low, sell high
    - Efficient battery usage
+
+
+
+
+## Running tests:
+pip install -e .[test] 
