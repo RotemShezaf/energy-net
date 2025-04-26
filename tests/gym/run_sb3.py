@@ -12,7 +12,7 @@ from energy_net.envs.wrappers.stable_baselines_wrappers import StableBaselines3W
 import os
 
 
-def make_env():
+def make_env(log_dir):
     # Create the environment with required parameters
     env = EnergyNetV0(
         controller_name="EnergyNetController",
@@ -26,7 +26,6 @@ def make_env():
     env = StableBaselines3Wrapper(env)
 
     # Create logs directory
-    log_dir = "../../logs"
     os.makedirs(log_dir, exist_ok=True)
 
     # Wrap with Monitor for episode stats
@@ -36,15 +35,16 @@ def make_env():
 
 
 def main():
+    log_dir = "../../logs"
     # Create the environment
-    env = make_env()
+    env = make_env(log_dir)
 
     # Create the PPO model
     model = PPO(
         "MlpPolicy",
         env,
         verbose=1,
-        tensorboard_log="./ppo_energy_net_tensorboard/",
+        tensorboard_log=log_dir+"/ppo_energy_net_tensorboard/",
         learning_rate=3e-4,
         n_steps=2048,
         batch_size=64,
@@ -56,13 +56,13 @@ def main():
     )
 
     # Create evaluation environment
-    eval_env = make_env()
+    eval_env = make_env(log_dir)
 
     # Create evaluation callback
     eval_callback = EvalCallback(
         eval_env,
         best_model_save_path="./best_model/",
-        log_path="../../logs/",
+        log_path=log_dir,
         eval_freq=10000,
         deterministic=True,
         render=False
