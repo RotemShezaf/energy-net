@@ -1,7 +1,10 @@
 from typing import Callable, Any, TypedDict, List, Dict, Tuple  # Add Tuple import
+
+import numpy as np
 import yaml
 import os
 
+from ..envs.env_utils import assign_indexes
 from ..model.state import State
 
 AggFunc = Callable[[List[Dict[str, Any]]], Dict[str, Any]]
@@ -90,3 +93,32 @@ def load_config(config_path: str, bValidate:bool= False) -> Dict[str, Any]:
 
 def dict_level_alingment(d, key1, key2):
     return d[key1] if key2 not in d[key1] else d[key1][key2]
+
+
+def dict_to_numpy_array(dict, index_mapping=None):
+    """
+    Converts the dictionary of box objects to a numpy array using the index mapping.
+
+    Args:
+        box_dict (dict): The dictionary of box objects.
+        index_mapping (dict): The dictionary mapping each key to an index.
+
+    Returns:
+        np.ndarray: A numpy array representing the combined box objects.
+    """
+    if index_mapping is None:
+        index_mapping = assign_indexes(dict)
+    # Determine the total size of the numpy array
+    total_size = sum(np.prod(box['shape']) for box in dict.values())
+
+    # Create an empty numpy array of the appropriate size
+    result_array = np.empty(total_size, dtype=np.float32)
+
+    current_position = 0
+    for key, idx in index_mapping.items():
+        box = dict[key]
+        size = np.prod(box['shape'])
+        result_array[current_position:current_position + size] = np.full(box['shape'], box['low']).flatten()
+        current_position += size
+
+    return result_array

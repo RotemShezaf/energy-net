@@ -23,6 +23,7 @@ from typing import Dict, Any, Union, Optional
 from gymnasium import spaces
 
 from energy_net.dynamics.consumption_dynamics.demand_patterns import DemandPattern
+from energy_net.envs.env_utils import bounds_to_gym
 from energy_net.market.pricing.cost_types import CostType
 from energy_net.market.pricing.pricing_policy import PricingPolicy
 
@@ -78,10 +79,10 @@ class EnergyNetV0(gym.Env):
         # Define agent spaces
         self.agents = ["iso", "pcs"]
         
-        iso_obs_space = self.controller.get_iso_observation_space()
-        pcs_obs_space = self.controller.get_pcs_observation_space()
-        iso_action_space = self.controller.get_iso_action_space()
-        pcs_action_space = self.controller.get_pcs_action_space()
+        iso_obs_space = bounds_to_gym(self.controller.get_iso_observation_space())
+        pcs_obs_space = bounds_to_gym(self.controller.get_pcs_observation_space())
+        iso_action_space = bounds_to_gym(self.controller.get_iso_action_space())
+        pcs_action_space = bounds_to_gym(self.controller.get_pcs_action_space())
         
         if self.single_agent:
             # In single-agent mode, combine spaces using Dict

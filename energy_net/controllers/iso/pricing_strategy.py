@@ -24,7 +24,6 @@ import numpy as np
 import logging
 from abc import ABC, abstractmethod
 from energy_net.market.pricing.pricing_policy import PricingPolicy
-#from gymnasium import spaces
 from energy_net.defs import Bounds
 from energy_net.market.iso.quadratic_pricing_iso import QuadraticPricingISO
 

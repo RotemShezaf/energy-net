@@ -1,4 +1,4 @@
-from typing import Callable, Any, TypedDict
+from typing import Callable, Any, TypedDict, Union, List
 import numpy as np
 
 # used to represent production price per produced unit
@@ -23,12 +23,14 @@ class Bounds:
     shape : tuple
         The shape of the bound space.
     """
-    def __init__(self, low: Any, high: Any, dtype: Any, shape: Any="Box"):
-        self.low = low
-        self.high = high
-        self.dtype = dtype
-        self.shape = shape
-        
+    def __init__(self, low: Union[Any, np.ndarray, List[Any]]=None, high: Union[Any, np.ndarray, List[Any]]=None, dtype: Any = None):
+
+        self.low = np.atleast_1d(np.array(low, dtype=dtype))
+        self.high = np.atleast_1d(np.array(high, dtype=dtype))
+
+        if self.low.shape != self.high.shape:
+            raise ValueError(f"Low and high must have the same shape. Got {self.low.shape} and {self.high.shape}.")
+
     def remove_first_dim(self):
         """
         Remove the first dimension from both `low` and `high`, and update `shape`.
@@ -42,9 +44,9 @@ class Bounds:
         else:
             raise TypeError("Unsupported type for `low` and `high`. Must be list or np.ndarray.")
         
-        if isinstance(self.shape, tuple):
-            self.shape = self.shape[1:]
-        else:
-            raise TypeError("Unsupported type for `shape`. Must be tuple.")
+        #if isinstance(self.shape, tuple):
+        #    self.shape = self.shape[1:]
+        #else:
+        #    raise TypeError("Unsupported type for `shape`. Must be tuple.")
 
       

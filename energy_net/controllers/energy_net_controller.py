@@ -276,9 +276,7 @@ class EnergyNetController:
                 time_config.get('max', 1.0),
                 convert_inf(demand_config.get('max', np.inf)),
                 convert_inf(pcs_config.get('max', np.inf))
-            ], dtype=np.float32),
-            dtype=np.float32
-        )
+            ], dtype=np.float32))
         
         # PCS observation space
         pcs_obs_config = self.pcs_unit_config.get('observation_space', {})
@@ -327,9 +325,9 @@ class EnergyNetController:
             ], dtype=np.float32),
             high=np.array([
                 energy_config['charge_rate_max']
-            ], dtype=np.float32),
-            shape=(1,),
-            dtype=np.float32
+            ], dtype=np.float32)
+            #shape=(1,),
+            #dtype=np.float32
         )
         
         self.logger.info(f"ISO action space: {self.iso_action_space}")
