@@ -1,6 +1,7 @@
 import numpy as np
 from gymnasium.spaces import Box
 from energy_net.defs import Bounds
+DEFAULT_BOUND_VALUE = 1e10
 
 def assign_indexes(dict):
     """
@@ -37,15 +38,19 @@ def bounds_to_gym(bounds:Bounds) -> Box:
     dtype = bounds.low.dtype
 
     # Gymnasium doesn't accept infinite bounds — optionally clip if needed
-    low = np.where(np.isfinite(bounds.low), bounds.low, -1e10)
-    high = np.where(np.isfinite(bounds.high), bounds.high, 1e10)
+    low = np.where(np.isfinite(bounds.low), bounds.low, -DEFAULT_BOUND_VALUE)
+    high = np.where(np.isfinite(bounds.high), bounds.high, DEFAULT_BOUND_VALUE)
 
     return Box(low=low, high=high, dtype=dtype)
 
 
 
 def gym_to_bounds(box:Box) -> Bounds:
-    return Bounds(low=box.low,high=box.high)
+    low = np.where(np.isclose(box.low, -DEFAULT_BOUND_VALUE),-np.inf,box.low)
+    high = np.where(np.isclose(box.high, DEFAULT_BOUND_VALUE),np.inf,box.high)
+
+
+    return Bounds(low=low,high=high)
 
 
 
