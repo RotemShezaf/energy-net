@@ -1,6 +1,6 @@
 # EnergyNet: Multi-Agent Reinforcement Learning for Smart Grid Simulation
 
-EnergyNet is a framework for simulating smart grid environments and training reinforcement learning agents to optimize grid operations. The framework features a multi-agent environment with two key strategic entities: the Independent System Operator (ISO) and Power Control System (PCS) agents.
+EnergyNet is a framework for simulating smart grid environments and training reinforcement learning agents to optimize grid operations. The framework features a multi-agent environment with two key strategic entities: the Independent System Operator (ISO) and Production Consumption Storage (PCS) agents.
 
 ## System Overview
 
