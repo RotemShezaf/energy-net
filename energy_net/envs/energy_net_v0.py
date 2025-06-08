@@ -18,14 +18,14 @@ efficiently manage electricity markets and battery storage.
 """
 
 import gymnasium as gym
-import importlib
-from typing import Dict, Any, Union, Optional
 from gymnasium import spaces
+import numpy as np
+from typing import Dict, Any, Tuple, Union, List, Optional
 
-from energy_net.dynamics.consumption_dynamics.demand_patterns import DemandPattern
-from energy_net.envs.env_utils import bounds_to_gym
-from energy_net.market.pricing.cost_types import CostType
+from energy_net.controllers.energy_net_controller import EnergyNetController
 from energy_net.market.pricing.pricing_policy import PricingPolicy
+from energy_net.dynamics.consumption_dynamics.demand_patterns import DemandPattern
+from energy_net.market.pricing.cost_types import CostType
 
 
 class EnergyNetV0(gym.Env):
@@ -36,7 +36,7 @@ class EnergyNetV0(gym.Env):
     following a multi-agent extension of the Gym interface where step() takes multiple
     actions and returns observations, rewards, and done flags for all agents.
     
-    The environment uses a unified controller to manage the sequential
+    The environment uses a unified EnergyNetController to manage the sequential
     simulation, where:
     1. ISO agent sets energy prices
     2. PCS agent responds with battery control actions
@@ -50,60 +50,95 @@ class EnergyNetV0(gym.Env):
     
     def __init__(
         self,
-        controller_name: str = "EnergyNetController",
-        controller_module: str = "energy_net.controllers",
-        single_agent: bool = True,  # Default to single-agent mode for backward compatibility
-        **controller_kwargs
+        cost_type: Union[str, CostType] = None,
+        pricing_policy: Union[str, PricingPolicy] = None,
+        demand_pattern: Union[str, DemandPattern] = None,
+        num_pcs_agents: int = 1,
+        render_mode: Optional[str] = None,
+        env_config_path: Optional[str] = 'configs/environment_config.yaml',
+        iso_config_path: Optional[str] = 'configs/iso_config.yaml',
+        pcs_unit_config_path: Optional[str] = 'configs/pcs_unit_config.yaml',
+        log_file: Optional[str] = 'logs/environments.log',
+        iso_reward_type: str = 'iso',
+        pcs_reward_type: str = 'cost',
+        dispatch_config: Optional[Dict[str, Any]] = None,
+        demand_data_path: Optional[str] = None,
     ):
         """
         Initialize the unified Energy Net environment.
         
         Args:
-            controller_name: Name of the controller class to use (default: "EnergyNetController")
-            controller_module: Python module path where the controller is defined (default: "energy_net.controllers")
-            single_agent: Whether to use single-agent mode (default: True)
-            **controller_kwargs: Additional keyword arguments to pass to the controller
+            cost_type: How grid operation costs are calculated (CONSTANT, VARIABLE, TIME_OF_USE)
+            pricing_policy: Policy for determining energy prices (ONLINE, QUADRATIC, CONSTANT)
+            demand_pattern: Pattern of demand variation over time (SINUSOIDAL, RANDOM, PERIODIC, SPIKES, DATA_DRIVEN)
+            num_pcs_agents: Number of PCS units (currently only supports 1)
+            render_mode: Visual rendering mode (not currently implemented)
+            env_config_path: Path to environment configuration file
+            iso_config_path: Path to ISO-specific configuration file
+            pcs_unit_config_path: Path to PCS unit configuration file
+            log_file: Path for logging controller events
+            iso_reward_type: Type of reward function for ISO agent
+            pcs_reward_type: Type of reward function for PCS agent
+            dispatch_config: Configuration for dispatch control
+            demand_data_path: Path to demand data file for DATA_DRIVEN pattern
         """
         super().__init__()
         
-        self.single_agent = single_agent
+        # Convert enum strings to actual enums if needed
+        if isinstance(cost_type, str):
+            cost_type = CostType[cost_type.upper()]
+        elif cost_type is None:
+            cost_type = CostType.CONSTANT  # Default cost type
+            
+        if isinstance(pricing_policy, str):
+            pricing_policy = PricingPolicy[pricing_policy.upper()]
+        elif pricing_policy is None:
+            pricing_policy = PricingPolicy.ONLINE  # Default pricing policy
+            
+        if isinstance(demand_pattern, str):
+            demand_pattern = DemandPattern[demand_pattern.upper()]
+        elif demand_pattern is None:
+            demand_pattern = DemandPattern.SINUSOIDAL  # Default demand pattern
         
-        # Dynamically import and instantiate the controller
-        try:
-            module = importlib.import_module(controller_module)
-            controller_class = getattr(module, controller_name)
-            self.controller = controller_class(**controller_kwargs)
-        except (ImportError, AttributeError) as e:
-            raise ValueError(f"Failed to initialize controller {controller_name} from module {controller_module}: {str(e)}")
+        # Log if using data-driven pattern
+        if demand_pattern == DemandPattern.DATA_DRIVEN:
+            if demand_data_path:
+                print(f"Using DATA_DRIVEN demand pattern with data from: {demand_data_path}")
+            else:
+                print("WARNING: DATA_DRIVEN pattern selected but no demand_data_path provided")
+        
+        # Initialize the unified controller
+        self.controller = EnergyNetController(
+            cost_type=cost_type,
+            pricing_policy=pricing_policy,
+            demand_pattern=demand_pattern,
+            num_pcs_agents=num_pcs_agents,
+            render_mode=render_mode,
+            env_config_path=env_config_path,
+            iso_config_path=iso_config_path,
+            pcs_unit_config_path=pcs_unit_config_path,
+            log_file=log_file,
+            iso_reward_type=iso_reward_type,
+            pcs_reward_type=pcs_reward_type,
+            dispatch_config=dispatch_config,
+            demand_data_path=demand_data_path,
+        )
         
         # Define agent spaces
+        # Note: In this implementation, we're using dict spaces for compatibility
+        # with multi-agent RL frameworks, but the controller internally uses
+        # separate spaces for each agent
         self.agents = ["iso", "pcs"]
         
-        iso_obs_space = bounds_to_gym(self.controller.get_iso_observation_space())
-        pcs_obs_space = bounds_to_gym(self.controller.get_pcs_observation_space())
-        iso_action_space = bounds_to_gym(self.controller.get_iso_action_space())
-        pcs_action_space = bounds_to_gym(self.controller.get_pcs_action_space())
+        self.observation_space = {
+            "iso": self.controller.get_iso_observation_space(),
+            "pcs": self.controller.get_pcs_observation_space()
+        }
         
-        if self.single_agent:
-            # In single-agent mode, combine spaces using Dict
-            self.observation_space = spaces.Dict({
-                "iso": iso_obs_space,
-                "pcs": pcs_obs_space
-            })
-            self.action_space = spaces.Dict({
-                "iso": iso_action_space,
-                "pcs": pcs_action_space
-            })
-        else:
-            # In multi-agent mode, use regular dicts
-            self.observation_space = {
-                "iso": iso_obs_space,
-                "pcs": pcs_obs_space
-            }
-            self.action_space = {
-                "iso": iso_action_space,
-                "pcs": pcs_action_space
-            }
+        self.action_space = {
+            "iso": self.controller.get_iso_action_space(),
+            "pcs": self.controller.get_pcs_action_space()
+        }
 
     def reset(self, seed=None, options=None):
         """
@@ -173,6 +208,12 @@ class EnergyNetV0(gym.Env):
             "iso": truncated[0] if isinstance(truncated, (list, tuple)) else truncated,
             "pcs": truncated[1] if isinstance(truncated, (list, tuple)) else truncated
         }
+        
+        # Inject iso_reward and pcs_reward into info for logging/monitoring
+        info.update({
+            'iso_reward': reward_dict['iso'],
+            'pcs_reward': reward_dict['pcs']
+        })
         
         return obs_dict, reward_dict, terminated_dict, truncated_dict, info
 

@@ -6,7 +6,7 @@ import math
 
 
 
-class BatteryDynamicsDet(ModelBasedDynamics):
+class DeterministicBattery(ModelBasedDynamics):
     """
     Deterministic Battery Dynamics.
     

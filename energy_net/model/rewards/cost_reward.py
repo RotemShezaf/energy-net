@@ -46,6 +46,5 @@ class CostReward(BaseReward):
         self.episode_reward += reward
         self.step_count += 1
         
-        #print(f"[REWARD] Step {self.step_count}: net_exchange={net_exchange:.4f}, cost={cost:.4f}, reward={reward:.4f}, episode_total={self.episode_reward:.4f}")
         
         return reward

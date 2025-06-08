@@ -24,26 +24,32 @@ separate environments and provides a more realistic simulation.
 """
 
 import numpy as np
-#from gymnasium import spaces
-from typing import Dict, Any, Optional
-
-from energy_net.defs import Bounds
+import gymnasium as gym
+from gymnasium import spaces
+import logging
+import yaml
+import os
+from typing import Dict, Any, Tuple, Union, List, Optional
 from energy_net.utils.logger import setup_logger
-from energy_net.dynamics.consumption_dynamics.demand_patterns import calculate_demand
-from energy_net.market.pricing.cost_types import calculate_costs
-from energy_net.controllers.iso.pricing_strategy import PricingStrategyFactory
+from energy_net.market.pricing.pricing_policy import PricingPolicy
+from energy_net.market.pricing.cost_types import CostType, calculate_costs
+from energy_net.dynamics.consumption_dynamics.demand_patterns import DemandPattern, calculate_demand
+from energy_net.controllers.iso.pricing_strategy import PricingStrategyFactory, QuadraticPricingStrategy
 from energy_net.controllers.unified_metrics_handler import UnifiedMetricsHandler
 from energy_net.controllers.pcs.battery_manager import BatteryManager
 
 # Import PCSUnit for full functionality
 from energy_net.components.pcsunit import PCSUnit
-
+from energy_net.dynamics.energy_dynamcis import EnergyDynamics, ModelBasedDynamics
+from energy_net.dynamics.production_dynamics.production_dynmaics_det import DeterministicProduction
+from energy_net.dynamics.consumption_dynamics.consumption_dynamics_det import DeterministicConsumption
+from energy_net.dynamics.storage_dynamics.battery_dynamics_det import DeterministicBattery
 
 # Import reward classes for reference in metrics handler
 from energy_net.model.rewards.base_reward import BaseReward
 from energy_net.model.rewards.cost_reward import CostReward
 from energy_net.model.rewards.iso_reward import ISOReward
-from energy_net.utils.utils import load_config
+
 
 
 class EnergyNetController:
@@ -86,6 +92,7 @@ class EnergyNetController:
         iso_reward_type: str = 'iso',
         pcs_reward_type: str = 'cost',
         dispatch_config: Optional[Dict[str, Any]] = None,
+        demand_data_path: Optional[str] = None,
     ):
         """
         Initialize the unified Energy Net controller.
@@ -103,6 +110,7 @@ class EnergyNetController:
             iso_reward_type: Type of reward function for ISO agent
             pcs_reward_type: Type of reward function for PCS agent
             dispatch_config: Configuration for dispatch control
+            demand_data_path: Path to demand data configuration file (used with DATA_DRIVEN pattern)
         """
         # Set up logger
         self.log_file = log_file  # Store log_file as instance attribute
@@ -117,10 +125,24 @@ class EnergyNetController:
         self.logger.info(f"Using demand pattern: {demand_pattern.value}")
         self.logger.info(f"Using cost type: {cost_type.value}")
 
+        # Store demand data path for DATA_DRIVEN pattern
+        self.demand_data_path = demand_data_path
+        if demand_pattern == DemandPattern.DATA_DRIVEN:
+            if demand_data_path:
+                self.logger.info(f"Using data-driven demand pattern with data from: {demand_data_path}")
+            else:
+                self.logger.warning("DATA_DRIVEN pattern selected but no demand_data_path provided")
+
         # Load configurations
-        self.env_config = load_config(config_path=env_config_path)
-        self.iso_config = load_config(config_path=iso_config_path)
-        self.pcs_unit_config = load_config(config_path=pcs_unit_config_path)
+        self.env_config = self._load_config(env_config_path)
+        self.iso_config = self._load_config(iso_config_path)
+        self.pcs_unit_config = self._load_config(pcs_unit_config_path)
+
+        # If using DATA_DRIVEN pattern, add data file to demand configuration
+        if demand_pattern == DemandPattern.DATA_DRIVEN and demand_data_path:
+            if 'predicted_demand' not in self.env_config:
+                self.env_config['predicted_demand'] = {}
+            self.env_config['predicted_demand']['data_file'] = demand_data_path
 
         # Initialize shared state variables
         self.current_time = 0.0
@@ -163,8 +185,44 @@ class EnergyNetController:
         self._create_observation_spaces()
         self._create_action_spaces()
         
+        # Initialize the unified metrics handler with reward references
+        # This allows the metrics handler to use the reward functions internally
+        reward_type = self.pcs_unit_config.get('reward', {}).get('type', 'cost')
+        self.reward_function = self._initialize_reward(reward_type)
+        
+        self.metrics = UnifiedMetricsHandler(
+            env_config=self.env_config,
+            iso_config=self.iso_config,
+            pcs_config=self.pcs_unit_config,
+            cost_type=self.cost_type,
+            reward_function=self.reward_function,  # Pass reward function reference
+            logger=self.logger
+        )
+        
+        # If using data-driven demand pattern, load raw data for visualization
+        if self.demand_pattern == DemandPattern.DATA_DRIVEN and self.demand_data_path:
+            try:
+                from energy_net.dynamics.consumption_dynamics.demand_patterns import get_raw_demand_data
+                raw_demand_data = get_raw_demand_data(self.demand_data_path)
+                if hasattr(self.metrics, 'set_demand_data_raw'):
+                    self.metrics.set_demand_data_raw(raw_demand_data)
+                    self.logger.info(f"Loaded raw demand data with {len(raw_demand_data)} points for visualization")
+            except Exception as e:
+                self.logger.warning(f"Error loading raw demand data for visualization: {e}")
+        
+        # Initialize battery state
+        self.battery_level = self.battery_manager.get_level()
+        
         self.logger.info("EnergyNetController initialized successfully")
 
+    def _load_config(self, config_path: str) -> Dict[str, Any]:
+        """Load configuration from YAML file"""
+        try:
+            with open(config_path, 'r') as file:
+                return yaml.safe_load(file)
+        except Exception as e:
+            self.logger.error(f"Failed to load config from {config_path}: {e}")
+            raise
 
     def _init_iso_components(self, dispatch_config: Optional[Dict[str, Any]]):
         """Initialize ISO-specific components"""
@@ -237,6 +295,17 @@ class EnergyNetController:
             logger=self.logger
         )
         
+        # If using data-driven demand pattern, load raw data for visualization
+        if self.demand_pattern == DemandPattern.DATA_DRIVEN and self.demand_data_path:
+            try:
+                from energy_net.dynamics.consumption_dynamics.demand_patterns import get_raw_demand_data
+                raw_demand_data = get_raw_demand_data(self.demand_data_path)
+                if hasattr(self.metrics, 'set_demand_data_raw'):
+                    self.metrics.set_demand_data_raw(raw_demand_data)
+                    self.logger.info(f"Loaded raw demand data with {len(raw_demand_data)} points for visualization")
+            except Exception as e:
+                self.logger.warning(f"Error loading raw demand data for visualization: {e}")
+        
         # Initialize battery state
         self.battery_level = self.battery_manager.get_level()
         
@@ -266,7 +335,7 @@ class EnergyNetController:
                 return -np.inf
             return value
         
-        self.iso_observation_space = Bounds(
+        self.iso_observation_space = spaces.Box(
             low=np.array([
                 time_config.get('min', 0.0),
                 demand_config.get('min', 0.0),
@@ -276,7 +345,9 @@ class EnergyNetController:
                 time_config.get('max', 1.0),
                 convert_inf(demand_config.get('max', np.inf)),
                 convert_inf(pcs_config.get('max', np.inf))
-            ], dtype=np.float32))
+            ], dtype=np.float32),
+            dtype=np.float32
+        )
         
         # PCS observation space
         pcs_obs_config = self.pcs_unit_config.get('observation_space', {})
@@ -292,7 +363,7 @@ class EnergyNetController:
         buy_price_config = pcs_obs_config.get('iso_buy_price', {})
         sell_price_config = pcs_obs_config.get('iso_sell_price', {})
         
-        self.pcs_observation_space = Bounds(
+        self.pcs_observation_space = spaces.Box(
             low=np.array([
                 battery_min,
                 pcs_time_config.get('min', 0.0),
@@ -319,15 +390,15 @@ class EnergyNetController:
         
         # PCS action space
         energy_config = self.pcs_unit_config['battery']['model_parameters']
-        self.pcs_action_space = Bounds(
+        self.pcs_action_space = spaces.Box(
             low=np.array([
                 -energy_config['discharge_rate_max']
             ], dtype=np.float32),
             high=np.array([
                 energy_config['charge_rate_max']
-            ], dtype=np.float32)
-            #shape=(1,),
-            #dtype=np.float32
+            ], dtype=np.float32),
+            shape=(1,),
+            dtype=np.float32
         )
         
         self.logger.info(f"ISO action space: {self.iso_action_space}")
@@ -403,9 +474,9 @@ class EnergyNetController:
         if hasattr(self.metrics, 'update_pcs_action'):
             self.metrics.update_pcs_action(pcs_action)
         
-        # Update time and step count - Using the same approach as in PCSUnitController
-        self.count += 1
+        # Update current time based on count, then increment step count
         self.current_time = (self.count * self.time_step_duration) / self.env_config['time']['minutes_per_day']
+        self.count += 1
         
         # Update demand prediction for this time step
         self._update_time_and_demand()
@@ -502,7 +573,7 @@ class EnergyNetController:
             
             # CRITICAL FIX: Directly update the PCSUnit with the battery action
             time_fraction = self.count * self.time_step_duration / self.env_config['time']['minutes_per_day']
-            self.pcs_unit.update(time=time_fraction, battery_action=battery_command)
+            self.pcs_unit.update(time=time_fraction, battery_action=battery_command, step=self.count)
             
             # Calculate energy change using the correct method
             energy_change, new_battery_level = self.battery_manager.calculate_energy_change(battery_command)
@@ -526,13 +597,53 @@ class EnergyNetController:
             efficiency_loss = abs(energy_change - actual_energy_change)
             self.metrics.pcs_metrics['efficiency_losses'].append(efficiency_loss)
         
-        # Execute energy exchange
-        if energy_needed > 0:  # Buying from grid
-            self.energy_bought += energy_needed
-            cost = self.iso_buy_price * energy_needed
-        else:  # Selling to grid
-            self.energy_sold += abs(energy_needed)
-            cost = self.iso_sell_price * energy_needed  # Note: energy_needed is negative
+        # Incorporate background process residuals into grid exchange
+        bg_res = self.pcs_unit.get_background_residuals()
+        extra = sum(bg_res.values())
+        print(f"[Controller] Background residuals: {bg_res}, extra: {extra:.4f} MWh")
+        energy_needed += extra
+        print(f"[Controller] Total energy_needed after background: {energy_needed:.4f} MWh")
+        # FIRST: Calculate the PCS demand for tracking and observation
+        time_step = self.time_step_duration / self.env_config['time']['minutes_per_day']
+        self.pcs_demand = energy_needed / time_step  # Convert energy to power
+        
+        # THEN: Handle energy exchange cost based on pricing strategy
+        if isinstance(self.pricing_strategy, QuadraticPricingStrategy):
+            # For QUADRATIC pricing, we calculate prices based on the actual PCS volume
+            
+            # Remember old prices in case we need them when energy_needed = 0
+            old_buy_price = self.iso_buy_price
+            old_sell_price = self.iso_sell_price
+            
+            if energy_needed > 0:  # PCS buying from grid
+                p = energy_needed
+                marginal_price = self.pricing_strategy.buy_iso.get_pricing_function({})(p)
+                self.energy_bought += p
+                cost = marginal_price * p
+                self.iso_buy_price = marginal_price
+                # Keep sell price unchanged to maintain continuous time series
+            elif energy_needed < 0:  # PCS selling to grid
+                p = abs(energy_needed)
+                marginal_price = self.pricing_strategy.sell_iso.get_pricing_function({})(p)
+                self.energy_sold += p
+                cost = marginal_price * p  # Cost to ISO (revenue to PCS) - keep as positive for plotting
+                self.iso_sell_price = marginal_price
+                # Keep buy price unchanged to maintain continuous time series
+            else:
+                # No trade => zero cost, keep previous iso prices
+                cost = 0.0
+                self.iso_buy_price = old_buy_price  # Explicitly retain previous prices
+                self.iso_sell_price = old_sell_price
+                
+            # CRITICAL: Always update prices to metrics for every step, regardless of trade
+            self.metrics.update_prices(self.iso_buy_price, self.iso_sell_price)
+        else:
+            if energy_needed > 0:  # Buying from grid
+                self.energy_bought += energy_needed
+                cost = self.iso_buy_price * energy_needed
+            else:  # Selling to grid
+                self.energy_sold += abs(energy_needed)
+                cost = self.iso_sell_price * energy_needed  # Note: energy_needed is negative
         
         # Update metrics with energy exchange and battery level
         self.metrics.update_energy_exchange(energy_needed, cost)
@@ -541,12 +652,6 @@ class EnergyNetController:
         # Track the action in metrics
         self.metrics.pcs_metrics['actions'].append(pcs_action)
         
-        # Calculate time_step for conversion - matching PCSUnitController approach
-        time_step = self.time_step_duration / self.env_config['time']['minutes_per_day']
-        
-        # Update PCS demand for ISO observation
-        self.pcs_demand = energy_needed / time_step  # Convert energy to power
-        
         self.logger.debug(f"PCS energy exchange: {energy_needed}, cost: {cost}, battery level: {self.battery_level:.4f}")
 
     def _update_time_and_demand(self):
@@ -554,10 +659,16 @@ class EnergyNetController:
         # No need to update time here, as it's already updated in the step method
         
         # Update demand prediction for this step
+        demand_config = self.env_config['predicted_demand'].copy()
+        
+        # If using DATA_DRIVEN pattern, ensure data_file is set
+        if self.demand_pattern == DemandPattern.DATA_DRIVEN and self.demand_data_path:
+            demand_config['data_file'] = self.demand_data_path
+        
         self.predicted_demand = calculate_demand(
             time=self.current_time,
             pattern=self.demand_pattern,
-            config=self.env_config['predicted_demand']
+            config=demand_config
         )
         
         # Log updated time and demand prediction
@@ -686,6 +797,7 @@ class EnergyNetController:
             'iso_sell_price': self.iso_sell_price,
             'predicted_demand': self.predicted_demand,
             'realized_demand': self.actual_demand,
+            'pcs_demand': self.pcs_demand,
             'net_demand': self.actual_demand,  # includes PCS contribution
             'dispatch': self.dispatch,  # Use tracked dispatch value instead of predicted_demand
             'shortfall': max(0.0, self.actual_demand - self.dispatch),
@@ -709,6 +821,11 @@ class EnergyNetController:
             'episode_iso_reward': self.metrics.total_iso_reward,
             'episode_pcs_reward': self.metrics.total_pcs_reward
         })
+        
+        # Include background process actions
+        if hasattr(self.pcs_unit, 'get_background_actions'):
+            for name, amount in self.pcs_unit.get_background_actions().items():
+                info[f'background_{name}'] = amount
         
         return info
 

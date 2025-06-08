@@ -6,10 +6,11 @@ wrapped appropriately for training with RL-Baselines3-Zoo.
 """
 
 import os
-from stable_baselines3 import PPO
+import gymnasium as gym
+from stable_baselines3 import PPO, TD3
 from stable_baselines3.common.monitor import Monitor
 
-from energy_net.envs import EnergyNetV0
+from energy_net.env import EnergyNetV0
 
 
 def make_iso_env_zoo(
@@ -20,8 +21,6 @@ def make_iso_env_zoo(
     dispatch_strategy="PROPORTIONAL",
     monitor=True,
     seed=None,
-    controller_name="EnergyNetController",
-    controller_module="energy_net.controllers",
     **kwargs
 ):
     """
@@ -35,8 +34,6 @@ def make_iso_env_zoo(
         dispatch_strategy: Strategy for dispatch when not controlled by agent
         monitor: Whether to wrap with Monitor for episode stats
         seed: Random seed
-        controller_name: Name of the controller class to use
-        controller_module: Python module path where the controller is defined
         **kwargs: Additional arguments to pass to EnergyNetV0
         
     Returns:
@@ -49,8 +46,6 @@ def make_iso_env_zoo(
     
     # Create base environment
     env_kwargs = {
-        "controller_name": controller_name,
-        "controller_module": controller_module,
         "dispatch_config": {
             "use_dispatch_action": use_dispatch_action,
             "default_strategy": dispatch_strategy
@@ -65,12 +60,18 @@ def make_iso_env_zoo(
     if pcs_policy_path:
         try:
             print(f"Loading PCS policy from {pcs_policy_path}")
-            pcs_policy = PPO.load(pcs_policy_path)
+            # Determine algorithm type from path
+            if 'td3' in pcs_policy_path.lower():
+                pcs_policy = TD3.load(pcs_policy_path)
+                print("Loaded TD3 PCS policy")
+            else:
+                pcs_policy = PPO.load(pcs_policy_path)
+                print("Loaded PPO PCS policy")
         except Exception as e:
             print(f"Error loading PCS policy: {e}")
     
     # Import here to avoid circular imports
-    from tmp.alternating_wrappers import ISOEnvWrapper
+    from energy_net.controllers.alternating_wrappers import ISOEnvWrapper
     
     # Apply ISO wrapper
     env = ISOEnvWrapper(env, pcs_policy=pcs_policy)
