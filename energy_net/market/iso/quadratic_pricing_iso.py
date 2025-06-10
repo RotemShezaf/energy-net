@@ -31,3 +31,18 @@ class QuadraticPricingISO(ISOBase):
             return self.buy_a * demand**2 + self.buy_b * demand + self.buy_c
             
         return price_fn
+
+class SublinearPricingISO(ISOBase):
+    """
+    ISO implementation that uses a sub-linear feed-in tariff function:
+    phi(p) = feed_lin * p + gamma * sqrt(p)
+    """
+    def __init__(self, feed_lin: float = 0.0, gamma: float = 0.0):
+        self.feed_lin = feed_lin
+        self.gamma = gamma
+
+    def get_pricing_function(self, state: Dict[str, Any]) -> Callable[[float], float]:
+        def price_fn(p: float) -> float:
+            # Sub-linear pricing: linear term plus square-root term
+            return self.feed_lin * p + self.gamma * np.sqrt(p)
+        return price_fn

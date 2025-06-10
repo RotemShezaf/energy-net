@@ -17,6 +17,7 @@ the PCS environment, with physically accurate constraints and behaviors.
 """
 
 from typing import Dict, Any, Optional, List, Tuple
+import numpy as np
 import logging
 from energy_net.components.pcsunit import PCSUnit
 
@@ -220,8 +221,8 @@ class BatteryManager:
             self.current_time_step += 1
             
             if self.logger:
-                self.logger.info(f"Battery updated through PCSUnit: {self.previous_level:.5f} -> {self.battery_level:.5f} MWh "
-                                f"(delta: {energy_change:.5f} MWh)")
+                self.logger.info(f"Battery updated through PCSUnit: {self.previous_level:.5f} → {self.battery_level:.5f} MWh "
+                                f"(Δ: {energy_change:.5f} MWh)")
                 
             return energy_change
         else:

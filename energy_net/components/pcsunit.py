@@ -7,6 +7,16 @@ from energy_net.components.production_devices.production_unit import ProductionU
 from energy_net.components.consumption_devices.consumption_unit import ConsumptionUnit
 from energy_net.dynamics.energy_dynamcis import EnergyDynamics
 from energy_net.grid_entity import CompositeGridEntity
+from energy_net.utils.logger import setup_logger  # Import the logger setup
+from energy_net.utils.utils import dict_level_alingment
+from energy_net.dynamics.storage_dynamics.battery_dynamics_det import DeterministicBattery
+from energy_net.dynamics.energy_dynamcis import DataDrivenDynamics
+from energy_net.dynamics.production_dynamics.production_dynmaics_det import DeterministicProduction
+from energy_net.dynamics.energy_dynamcis import DataDrivenDynamics
+from energy_net.dynamics.consumption_dynamics.consumption_dynamics_det import DeterministicConsumption
+from energy_net.dynamics.energy_dynamcis import DataDrivenDynamics
+
+
 
 
 class PCSUnit(CompositeGridEntity):
@@ -35,15 +45,13 @@ class PCSUnit(CompositeGridEntity):
         if battery_dynamics_type == 'model_based':
             battery_model_type = battery_config.get('model_type', 'deterministic_battery')
             if battery_model_type == 'deterministic_battery':
-                from energy_net.dynamics.storage_dynamics.battery_dynamics_det import BatteryDynamicsDet
 
-                battery_dynamics: EnergyDynamics = BatteryDynamicsDet(
+                battery_dynamics: EnergyDynamics = DeterministicBattery(
                     model_parameters=battery_config.get('model_parameters', {})
                 )
             else:
                 raise ValueError(f"Unsupported battery model type: {battery_model_type}")
         elif battery_dynamics_type == 'data_driven':
-            from energy_net.dynamics.energy_dynamcis import DataDrivenDynamics
 
             battery_dynamics: EnergyDynamics = DataDrivenDynamics(
                 data_file=battery_config.get('data_file', 'battery_data.csv'),
@@ -62,15 +70,14 @@ class PCSUnit(CompositeGridEntity):
         if production_dynamics_type == 'model_based':
             production_model_type = production_config.get('model_type', 'deterministic_production')
             if production_model_type == 'deterministic_production':
-                from energy_net.dynamics.production_dynamics.production_dynmaics_det import ProductionDynamicsDet
 
-                production_dynamics: EnergyDynamics = ProductionDynamicsDet(
+                production_dynamics: EnergyDynamics = DeterministicProduction(
                     model_parameters=production_config.get('model_parameters', {})
                 )
             else:
                 raise ValueError(f"Unsupported production_unit model type: {production_model_type}")
         elif production_dynamics_type == 'data_driven':
-            from energy_net.dynamics.energy_dynamcis import DataDrivenDynamics
+
 
             production_dynamics: EnergyDynamics = DataDrivenDynamics(
                 data_file=production_config.get('data_file', 'production_data.csv'),
@@ -89,15 +96,14 @@ class PCSUnit(CompositeGridEntity):
         if consumption_dynamics_type == 'model_based':
             consumption_model_type = consumption_config.get('model_type', 'deterministic_consumption')
             if consumption_model_type == 'deterministic_consumption':
-                from energy_net.dynamics.consumption_dynamics.consumption_dynamics_det import ConsumptionDynamicsDet
 
-                consumption_dynamics: EnergyDynamics = ConsumptionDynamicsDet(
+
+                consumption_dynamics: EnergyDynamics = DeterministicConsumption(
                     model_parameters=consumption_config.get('model_parameters', {})
                 )
             else:
                 raise ValueError(f"Unsupported consumption_unit model type: {consumption_model_type}")
         elif consumption_dynamics_type == 'data_driven':
-            from energy_net.dynamics.energy_dynamcis import DataDrivenDynamics
 
             consumption_dynamics: EnergyDynamics = DataDrivenDynamics(
                 data_file=consumption_config.get('data_file', 'consumption_data.csv'),
@@ -112,7 +118,40 @@ class PCSUnit(CompositeGridEntity):
         # Initialize the CompositeGridEntity with sub-entities
         super().__init__(sub_entities=sub_entities, log_file=log_file)
         
-    def update(self, time: float, battery_action: float, consumption_action: float = None, production_action: float = None) -> None:
+        # Initialize background processes configuration for autonomous injection/withdrawal
+        self.background_processes: list[dict] = []
+        for bg in config.get('background_processes', []):
+            name = bg.get('name')
+            interval = bg.get('interval')
+            start_time = bg.get('start_time', 0.0)
+            end_time = bg.get('end_time', 1.0)
+            quantity = bg.get('quantity', 0.0)
+            signed_quantity = quantity if bg.get('type') == 'production' else -quantity
+            # Determine if this uses step-based window (start_time >= 1 interpreted as step index)
+            use_step = isinstance(start_time, (int, float)) and start_time >= 1.0
+            bp = {
+                'name': name,
+                'signed_quantity': signed_quantity,
+                'use_step': use_step
+            }
+            if use_step:
+                # For step-based events: define start, end, and interval in steps
+                bp['start_step'] = int(start_time)
+                bp['end_step'] = int(end_time)
+                bp['interval_step'] = int(interval)
+            else:
+                # For time-based events: track fractional-day times
+                bp['interval'] = interval
+                bp['start_time'] = start_time
+                bp['end_time'] = end_time
+                bp['next_fire'] = start_time % 1.0
+            self.background_processes.append(bp)
+        # Initialize last background action tracking
+        self.last_background: dict[str, float] = {bp['name']: 0.0 for bp in self.background_processes}
+        # Initialize background residuals tracking
+        self.background_residuals: dict[str, float] = {bp['name']: 0.0 for bp in self.background_processes}
+        
+    def update(self, time: float, battery_action: float, consumption_action: float = None, production_action: float = None, step: int = None) -> None:
         """
         Updates the state of all components based on the current time and battery action.
 
@@ -126,6 +165,58 @@ class PCSUnit(CompositeGridEntity):
         self.battery.update(time=time, action=battery_action)
         self.logger.debug(f"Battery updated to energy level: {self.battery.get_state()} MWh")
         
+        # Autonomous background processes
+        # First handle any step-based schedules
+        for bp in self.background_processes:
+            if not bp.get('use_step'):
+                continue
+            # Reset background tracking
+            self.last_background[bp['name']] = 0.0
+            self.background_residuals[bp['name']] = 0.0
+            if step is None:
+                continue
+            start = bp['start_step']
+            end = bp['end_step']
+            interval = bp.get('interval_step', 1)
+            # Fire at each step in [start, end] with specified interval
+            if start <= step <= end and ((step - start) % interval == 0):
+                requested = bp['signed_quantity']
+                self.battery.perform_action(requested)
+                actual = self.battery.energy_change
+                residual = requested - actual
+                self.last_background[bp['name']] = requested
+                self.background_residuals[bp['name']] = residual
+                print(f"[PCSUnit] Background '{bp['name']}': requested {requested} MWh, actual {actual:.4f}, residual {residual:.4f}")
+                self.logger.debug(f"Background process '{bp['name']}' applied {requested} MWh at time {time:.4f}")
+        # Then handle time-based schedules
+        time_mod = time % 1.0
+        for bp in self.background_processes:
+            if bp.get('use_step'):
+                continue
+            # Determine if current time_mod falls within the configured window (support wrap-around)
+            start = bp['start_time']
+            end = bp['end_time']
+            if start <= end:
+                in_time_window = (start <= time_mod <= end)
+            else:
+                # Wrap-around window spans midnight
+                in_time_window = (time_mod >= start or time_mod <= end)
+            time_to_fire = time_mod + 1e-8 >= bp['next_fire']
+            # For one-time events (like solar burst), only fire once within window
+            if time_to_fire and in_time_window:
+                requested = bp['signed_quantity']
+                self.battery.perform_action(requested)
+                actual = self.battery.energy_change
+                residual = requested - actual
+                self.last_background[bp['name']] = requested
+                self.background_residuals[bp['name']] = residual
+                print(f"[PCSUnit] Background '{bp['name']}': requested {requested} MWh, actual {actual:.4f}, residual {residual:.4f}")
+                # Schedule next firing
+                bp['next_fire'] = (bp['next_fire'] + bp['interval']) % 1.0
+                self.logger.debug(f"Background process '{bp['name']}' applied {requested} MWh at time {time_mod:.4f}")
+            else:
+                self.last_background[bp['name']] = 0.0
+                self.background_residuals[bp['name']] = 0.0
 
         # Update ProductionUnit 
         self.production_unit.update(time=time, action=consumption_action)
@@ -194,3 +285,23 @@ class PCSUnit(CompositeGridEntity):
                 entity.reset(initial_battery_level)  # Pass initial level to battery
             else:
                 entity.reset()  # Normal reset for other components
+        
+        # Reset background process schedule and clear last actions for new day
+        for bp in self.background_processes:
+            # Reset the next firing time to the configured start_time modulo one day
+            bp['next_fire'] = bp.get('start_time', 0.0) % 1.0
+        # Clear last background actions and residuals
+        self.last_background = {bp['name']: 0.0 for bp in self.background_processes}
+        self.background_residuals = {bp['name']: 0.0 for bp in self.background_processes}
+
+    def get_background_actions(self) -> dict[str, float]:
+        """
+        Retrieve the last background process actions applied during the most recent update.
+        """
+        return self.last_background
+
+    def get_background_residuals(self) -> dict[str, float]:
+        """
+        Retrieve the last background process residuals (spill/shortfall) applied during the most recent update.
+        """
+        return self.background_residuals

@@ -5,7 +5,7 @@ from energy_net.dynamics.energy_dynamcis import ModelBasedDynamics
 import math
 
 
-class ConsumptionDynamicsDet(ModelBasedDynamics):
+class DeterministicConsumption(ModelBasedDynamics):
     """
     Deterministic Consumption Dynamics.
     Consumption has two peaks: midday and evening.

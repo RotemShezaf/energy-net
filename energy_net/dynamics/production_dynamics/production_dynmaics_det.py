@@ -5,7 +5,7 @@ from energy_net.dynamics.energy_dynamcis import ModelBasedDynamics
 import math
 
 
-class ProductionDynamicsDet(ModelBasedDynamics):
+class DeterministicProduction(ModelBasedDynamics):
     """
     Deterministic Production Dynamics.
     Production peaks at midday and decreases towards evening.

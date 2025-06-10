@@ -19,13 +19,13 @@ This design allows for easy extension to new pricing policies by implementing
 additional strategy classes.
 """
 
-from typing import Dict, Any, Union, Tuple, Optional
+from typing import Dict, Any, Union, Tuple, List, Optional
 import numpy as np
 import logging
 from abc import ABC, abstractmethod
 from energy_net.market.pricing.pricing_policy import PricingPolicy
-from energy_net.defs import Bounds
-from energy_net.market.iso.quadratic_pricing_iso import QuadraticPricingISO
+from gymnasium import spaces
+from energy_net.market.iso.quadratic_pricing_iso import QuadraticPricingISO, SublinearPricingISO
 
 class PricingStrategy(ABC):
     """
@@ -61,7 +61,7 @@ class PricingStrategy(ABC):
         self.logger = logger
     
     @abstractmethod
-    def create_action_space(self, use_dispatch_action: bool = False) -> Bounds:
+    def create_action_space(self, use_dispatch_action: bool = False) -> spaces.Space:
         """
         Create the appropriate action space for this pricing strategy.
         
@@ -69,7 +69,7 @@ class PricingStrategy(ABC):
             use_dispatch_action: Whether to include dispatch in the action space
             
         Returns:
-            A gym Space object representing the action space
+            A gymnasium Space object representing the action space
         """
         pass
     
@@ -143,7 +143,7 @@ class QuadraticPricingStrategy(PricingStrategy):
         poly_config = policy_config.get('polynomial', {})
         
         self.dispatch_min = dispatch_config.get('min', 0.0)
-        self.dispatch_max = dispatch_config.get('max', 300.0)
+        self.dispatch_max = dispatch_config.get('max', 500.0)
         self.low_poly = poly_config.get('min', -100.0)
         self.high_poly = poly_config.get('max', 100.0)
         
@@ -155,7 +155,7 @@ class QuadraticPricingStrategy(PricingStrategy):
         self.buy_iso = None
         self.sell_iso = None
     
-    def create_action_space(self, use_dispatch_action: bool = False) -> Bounds:
+    def create_action_space(self, use_dispatch_action: bool = False) -> spaces.Space:
         """
         Create the action space for quadratic pricing, optionally including dispatch.
         
@@ -180,7 +180,7 @@ class QuadraticPricingStrategy(PricingStrategy):
             low_array = np.full(6, self.low_poly, dtype=np.float32)
             high_array = np.full(6, self.high_poly, dtype=np.float32)
                 
-        return Bounds(
+        return spaces.Box(
             low=low_array,
             high=high_array,
             dtype=np.float32
@@ -229,40 +229,34 @@ class QuadraticPricingStrategy(PricingStrategy):
         
         action = np.array(action).flatten()
         
-        # Process pricing coefficients on first step
+        # Process pricing coefficients on first step (day-ahead), validating total length
         if step_count == 1 and not first_action_taken:
-            if use_dispatch_action:
-                # Extract pricing coefficients (first 6 values)
-                self.buy_coef = action[0:3]    # [b0, b1, b2] 
-                self.sell_coef = action[3:6]   # [s0, s1, s2]
-                # The dispatch is handled below, with current step's action
-            else:
-                # Only extract the pricing coefficients
-                expected_length = 6  # 6 polynomial coefficients
-                if len(action) < expected_length:
-                    if self.logger:
-                        self.logger.error(
-                            f"Expected at least {expected_length} pricing coefficients, "
-                            f"got {len(action)}"
-                        )
-                    raise ValueError(
-                        f"Expected at least {expected_length} pricing coefficients, "
-                        f"got {len(action)}"
+            # Expect 6 coefficients + 1 dispatch value if using dispatch
+            expected_length = 6 + (1 if use_dispatch_action else 0)
+            if len(action) < expected_length:
+                if self.logger:
+                    self.logger.error(
+                        f"Expected at least {expected_length} values for quadratic pricing "
+                        f"(6 coeffs{' + dispatch' if use_dispatch_action else ''}), got {len(action)}"
                     )
-                
-                self.buy_coef = action[0:3]    # [b0, b1, b2] 
-                self.sell_coef = action[3:6]   # [s0, s1, s2]
+                raise ValueError(
+                    f"Expected at least {expected_length} values for quadratic pricing "
+                    f"(6 coeffs{' + dispatch' if use_dispatch_action else ''}), got {len(action)}"
+                )
+            # Extract the 6 polynomial coefficients
+            self.buy_coef = action[0:3]
+            self.sell_coef = action[3:6]
             
             # Initialize ISO pricing objects
             self.buy_iso = QuadraticPricingISO(
                 buy_a=float(self.buy_coef[0]),
-                buy_b=float(self.buy_coef[1]), 
+                buy_b=float(self.buy_coef[1]),
                 buy_c=float(self.buy_coef[2])
             )
-            self.sell_iso = QuadraticPricingISO(
-                buy_a=float(self.sell_coef[0]),
-                buy_b=float(self.sell_coef[1]),
-                buy_c=float(self.sell_coef[2])
+            # Use sub-linear pricing for feed-in tariff
+            self.sell_iso = SublinearPricingISO(
+                feed_lin=float(self.sell_coef[0]),
+                gamma=float(self.sell_coef[1])
             )
 
             first_action_taken = True
@@ -274,9 +268,9 @@ class QuadraticPricingStrategy(PricingStrategy):
         buy_pricing_fn = self.buy_iso.get_pricing_function({'demand': predicted_demand}) if self.buy_iso else lambda x: 0
         iso_buy_price = max(buy_pricing_fn(predicted_demand), 0)
 
-        sell_pricing_fn = self.sell_iso.get_pricing_function({'demand': predicted_demand}) if self.sell_iso else lambda x: 0
-        iso_sell_price = 0.9*iso_buy_price
-        #iso_sell_price = max(sell_pricing_fn(predicted_demand), 0)
+        # Sub-linear feed-in tariff pricing
+        sell_pricing_fn = self.sell_iso.get_pricing_function({}) if self.sell_iso else lambda x: 0
+        iso_sell_price = max(sell_pricing_fn(predicted_demand), 0)
         
         # Process dispatch at each step if enabled
         if use_dispatch_action:
@@ -338,7 +332,7 @@ class ConstantPricingStrategy(PricingStrategy):
         poly_config = policy_config.get('polynomial', {})
         
         self.dispatch_min = dispatch_config.get('min', 0.0)
-        self.dispatch_max = dispatch_config.get('max', 300.0)
+        self.dispatch_max = dispatch_config.get('max', 500.0)
         self.low_const = poly_config.get('min', min_price)
         self.high_const = poly_config.get('max', max_price)
         
@@ -350,7 +344,7 @@ class ConstantPricingStrategy(PricingStrategy):
         self.buy_iso = None
         self.sell_iso = None
     
-    def create_action_space(self, use_dispatch_action: bool = False) -> Bounds:
+    def create_action_space(self, use_dispatch_action: bool = False) -> spaces.Space:
         """
         Create the action space for constant pricing, optionally including dispatch.
         
@@ -361,15 +355,15 @@ class ConstantPricingStrategy(PricingStrategy):
             A Box space with dimensions for constant buy/sell prices and optionally dispatch
         """
         if use_dispatch_action:
-            # Include a single dispatch value in the action space
-            low_array = np.array([self.min_price, self.min_price, self.dispatch_min], dtype=np.float32)
-            high_array = np.array([self.max_price, self.max_price, self.dispatch_max], dtype=np.float32)
+            # Only include dispatch in the action space for constant pricing
+            low_array = np.array([self.dispatch_min], dtype=np.float32)
+            high_array = np.array([self.dispatch_max], dtype=np.float32)
         else:
             # Only include constant prices
             low_array = np.array([self.min_price, self.min_price], dtype=np.float32)
             high_array = np.array([self.max_price, self.max_price], dtype=np.float32)
         
-        return Bounds(
+        return spaces.Box(
             low=low_array,
             high=high_array,
             dtype=np.float32
@@ -409,20 +403,10 @@ class ConstantPricingStrategy(PricingStrategy):
         
         action = np.array(action).flatten()
         
-        # Process constant prices on first step
+        # Process constant prices on first step (day-ahead)
         if step_count == 1 and not first_action_taken:
-            if use_dispatch_action:
-                if len(action) >= 3:
-                    # Extract constant prices (first 2 values)
-                    self.const_buy = float(action[0])
-                    self.const_sell = float(action[1])
-                    # Dispatch is processed below for each step
-                else:
-                    if self.logger:
-                        self.logger.error(f"Expected at least 3 values for action with dispatch, got {len(action)}.")
-                    raise ValueError(f"Expected at least 3 values for action with dispatch, got {len(action)}.")
-            else:
-                # Only extract constant prices
+            if not use_dispatch_action:
+                # Only extract constant prices if no dispatch action in vector
                 if len(action) >= 2:
                     self.const_buy = float(action[0])
                     self.const_sell = float(action[1])
@@ -430,23 +414,18 @@ class ConstantPricingStrategy(PricingStrategy):
                     if self.logger:
                         self.logger.error(f"Expected at least 2 price values, got {len(action)}.")
                     raise ValueError(f"Expected at least 2 price values, got {len(action)}.")
-            
+            # When use_dispatch_action=True, prices remain as defaults from config
+            # Dispatch will be processed separately below
             # Initialize ISO pricing objects for constant prices
             self.buy_iso = QuadraticPricingISO(
-                buy_a=0.0,
-                buy_b=0.0,
-                buy_c=self.const_buy
+                buy_a=0.0, buy_b=0.0, buy_c=self.const_buy
             )
             self.sell_iso = QuadraticPricingISO(
-                buy_a=0.0,
-                buy_b=0.0,
-                buy_c=self.const_sell
-            )   
-            
+                buy_a=0.0, buy_b=0.0, buy_c=self.const_sell
+            )
             first_action_taken = True
             if self.logger:
-                log_msg = f"Day-ahead constant prices - BUY: {self.const_buy}, SELL: {self.const_sell}"
-                self.logger.info(log_msg)
+                self.logger.info(f"Day-ahead constant prices - BUY: {self.const_buy}, SELL: {self.const_sell}")
         
         # Calculate constant prices
         buy_pricing_fn = self.buy_iso.get_pricing_function({'demand': predicted_demand}) if self.buy_iso else lambda x: 0
@@ -457,14 +436,13 @@ class ConstantPricingStrategy(PricingStrategy):
         
         # Process dispatch at each step if enabled
         if use_dispatch_action:
-            if len(action) >= 3:
-                dispatch = action[2]
-                # ENSURE STRICT CLIPPING of dispatch values
-                dispatch = float(np.clip(dispatch, self.dispatch_min, self.dispatch_max))
+            # Single-element action represents dispatch only
+            if len(action) >= 1:
+                dispatch = float(np.clip(action[0], self.dispatch_min, self.dispatch_max))
                 self.logger.info(f"Clipped dispatch to {dispatch:.2f} [range: {self.dispatch_min:.1f}-{self.dispatch_max:.1f}]")
             else:
                 if self.logger:
-                    self.logger.warning(f"Expected at least 3 values for action with dispatch, got {len(action)}. Using predicted demand as dispatch.")
+                    self.logger.warning(f"Expected dispatch value, got action length {len(action)}. Using predicted demand as dispatch.")
                 dispatch = predicted_demand
         
         if self.logger:
@@ -520,7 +498,7 @@ class OnlinePricingStrategy(PricingStrategy):
         self.sell_price_min = online_config.get('sell_price', {}).get('min', min_price)
         self.sell_price_max = online_config.get('sell_price', {}).get('max', max_price)
         self.dispatch_min = online_config.get('dispatch', {}).get('min', 0.0)
-        self.dispatch_max = online_config.get('dispatch', {}).get('max', 300.0)
+        self.dispatch_max = online_config.get('dispatch', {}).get('max', 500.0)
         
         if self.logger:
             self.logger.info(
@@ -529,9 +507,7 @@ class OnlinePricingStrategy(PricingStrategy):
                 f"Sell Price [{self.sell_price_min}, {self.sell_price_max}]"
             )
     
-
-    
-    def create_action_space(self, use_dispatch_action: bool = False) -> Bounds:
+    def create_action_space(self, use_dispatch_action: bool = False) -> spaces.Space:
         """
         Create the action space for online pricing, optionally including dispatch.
         
@@ -543,14 +519,14 @@ class OnlinePricingStrategy(PricingStrategy):
         """
         if use_dispatch_action:
             # Include dispatch in the action space
-            return Bounds(
+            return spaces.Box(
                 low=np.array([self.buy_price_min, self.sell_price_min, self.dispatch_min], dtype=np.float32),
                 high=np.array([self.buy_price_max, self.sell_price_max, self.dispatch_max], dtype=np.float32),
                 dtype=np.float32
             )
         else:
             # Only include buy/sell prices
-            return Bounds(
+            return spaces.Box(
                 low=np.array([self.buy_price_min, self.sell_price_min], dtype=np.float32),
                 high=np.array([self.buy_price_max, self.sell_price_max], dtype=np.float32),
                 dtype=np.float32
@@ -640,6 +616,107 @@ class OnlinePricingStrategy(PricingStrategy):
         return iso_buy_price, iso_sell_price, dispatch, first_action_taken
 
 
+class IntervalPricingStrategy(PricingStrategy):
+    """
+    Strategy for INTERVALS pricing policy: let ISO set buy/sell prices at 3 equally spaced intervals per episode.
+    """
+    def __init__(self, min_price: float, max_price: float, max_steps_per_episode: int, config: Dict[str, Any], logger: Optional[logging.Logger] = None):
+        super().__init__(min_price, max_price, max_steps_per_episode, logger)
+        policy_config = config.get('intervals', {})
+        n_intervals = policy_config.get('intervals', 3)
+        self.steps_per_interval = max_steps_per_episode // n_intervals
+        self.current_buy = min_price
+        self.current_sell = max_price
+        self.last_update_step = -1
+
+    def create_action_space(self, use_dispatch_action: bool = False) -> spaces.Space:
+        # Only buy/sell prices (no dispatch)
+        low = np.array([self.min_price, self.min_price], dtype=np.float32)
+        high = np.array([self.max_price, self.max_price], dtype=np.float32)
+        return spaces.Box(low=low, high=high, dtype=np.float32)
+
+    def process_action(
+        self,
+        action: Union[float, np.ndarray, int],
+        step_count: int,
+        first_action_taken: bool,
+        predicted_demand: float = 0.0,
+        use_dispatch_action: bool = False
+    ) -> Tuple[float, float, float, bool]:
+        # Update prices only at the start of each interval
+        if (step_count - 1) % self.steps_per_interval == 0 and step_count != self.last_update_step:
+            arr = np.array(action).flatten()
+            self.current_buy = float(np.clip(arr[0], self.min_price, self.max_price))
+            self.current_sell = float(np.clip(arr[1] if len(arr) > 1 else arr[0], self.min_price, self.max_price))
+            self.last_update_step = step_count
+        dispatch = predicted_demand
+        return self.current_buy, self.current_sell, dispatch, first_action_taken
+
+
+class QuadraticIntervalPricingStrategy(PricingStrategy):
+    """
+    Strategy for QUADRATIC_INTERVALS pricing policy: agent sets polynomial coefficients (a,b,c) for buy and (feed,gamma) for sell at each interval boundary.
+    """
+    def __init__(self, min_price: float, max_price: float, max_steps_per_episode: int, config: Dict[str, Any], logger: Optional[logging.Logger] = None):
+        super().__init__(min_price, max_price, max_steps_per_episode, logger)
+        # Get polynomial bounds from quadratic config
+        quad_cfg = config.get('quadratic', {})
+        poly_cfg = quad_cfg.get('polynomial', {})
+        self.low_poly = poly_cfg.get('min', -100.0)
+        self.high_poly = poly_cfg.get('max', 100.0)
+        # Number of intervals
+        intervals_cfg = config.get('intervals', {})
+        self.n_intervals = intervals_cfg.get('intervals', 3)
+        # Steps per interval (floor division)
+        self.steps_per_interval = max_steps_per_episode // self.n_intervals
+        # Track current interval index
+        self.current_interval = -1
+        # Pricing functions per interval
+        self.buy_iso = None
+        self.sell_iso = None
+
+    def create_action_space(self, use_dispatch_action: bool = False) -> spaces.Space:
+        # Dimension: 6 coefficients per interval
+        dims = self.n_intervals * 6
+        low = np.full(dims, self.low_poly, dtype=np.float32)
+        high = np.full(dims, self.high_poly, dtype=np.float32)
+        return spaces.Box(low=low, high=high, dtype=np.float32)
+
+    def process_action(
+        self,
+        action: Union[float, np.ndarray, int],
+        step_count: int,
+        first_action_taken: bool,
+        predicted_demand: float = 0.0,
+        use_dispatch_action: bool = False
+    ) -> Tuple[float, float, float, bool]:
+        arr = np.array(action).flatten()
+        # Determine which interval we're in (0-based)
+        idx = min((step_count - 1) // self.steps_per_interval, self.n_intervals - 1)
+        # On first step of a new interval, update coefficients
+        if idx != self.current_interval:
+            start = idx * 6
+            buy_coef = arr[start:start+3]
+            sell_coef = arr[start+3:start+6]
+            # Buy: quadratic iso
+            self.buy_iso = QuadraticPricingISO(
+                buy_a=float(buy_coef[0]), buy_b=float(buy_coef[1]), buy_c=float(buy_coef[2])
+            )
+            # Sell: sublinear feed-in tariff using first two coefficients
+            self.sell_iso = SublinearPricingISO(
+                feed_lin=float(sell_coef[0]), gamma=float(sell_coef[1])
+            )
+            self.current_interval = idx
+        # Compute prices based on current iso objects
+        buy_fn = self.buy_iso.get_pricing_function({'demand': predicted_demand}) if self.buy_iso else (lambda x: 0)
+        sell_fn = self.sell_iso.get_pricing_function({}) if self.sell_iso else (lambda x: 0)
+        iso_buy_price = max(buy_fn(predicted_demand), 0)
+        iso_sell_price = max(sell_fn(predicted_demand), 0)
+        # Dispatch default
+        dispatch = predicted_demand
+        return iso_buy_price, iso_sell_price, dispatch, first_action_taken
+
+
 class PricingStrategyFactory:
     """
     Factory class for creating pricing strategy instances.
@@ -700,6 +777,10 @@ class PricingStrategyFactory:
                 action_spaces_config,
                 logger
             )
+        elif pricing_policy == PricingPolicy.INTERVALS:
+            return IntervalPricingStrategy(min_price, max_price, max_steps_per_episode, action_spaces_config, logger)
+        elif pricing_policy == PricingPolicy.QUADRATIC_INTERVALS:
+            return QuadraticIntervalPricingStrategy(min_price, max_price, max_steps_per_episode, action_spaces_config, logger)
         else:
             if logger:
                 logger.error(f"Unsupported pricing policy: {pricing_policy}")

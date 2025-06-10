@@ -195,25 +195,14 @@ class UnifiedMetricsHandler:
             actual_demand: The actual demand after adding noise (if not provided)
         """
         self.predicted_demand = predicted_demand
-        
+
         # If actual demand is not provided, simulate it with noise
         if actual_demand is None:
-            # determine what fraction of the day we’re at
-            max_steps = self.env_config['time'].get('max_steps_per_episode', 48)
-            frac = (self.step_count / max_steps) if max_steps > 0 else 0.0
-           # early under‐peak (less consumption than predicted)
-            if 0.1 < frac < 0.4:
-                noise = -0.2 * predicted_demand
-            # late over‐peak (higher consumption than predicted)
-            elif 0.6 < frac < 0.9:
-                noise = +0.3 * predicted_demand
-           # otherwise small random jitter
-            else:
-                noise = np.random.normal(0, self.sigma)
+            noise = np.random.normal(0, self.sigma)
             self.realized_demand = predicted_demand + noise
         else:
-             self.realized_demand = actual_demand  
-             
+            self.realized_demand = actual_demand
+                     
                    
         self.iso_metrics['predicted_demands'].append(self.predicted_demand)
         self.iso_metrics['realized_demands'].append(self.realized_demand)
@@ -636,6 +625,17 @@ class UnifiedMetricsHandler:
         axs[0, 0].plot(times, self.iso_metrics['predicted_demands'], label='Predicted Demand')
         axs[0, 0].plot(times, self.iso_metrics['realized_demands'], label='Realized Demand')
         axs[0, 0].plot(times, self.iso_metrics['pcs_demands'], label='PCS Demand')
+        
+        # Check if we're using a data-driven pattern and have the raw data points available
+        if hasattr(self, 'demand_data_raw') and self.demand_data_raw:
+            # If we have raw demand data points, plot them as markers
+            data_times = []
+            data_values = []
+            for t, v in self.demand_data_raw.items():
+                data_times.append(t)
+                data_values.append(v)
+            axs[0, 0].scatter(data_times, data_values, color='red', marker='x', label='Data Points')
+        
         axs[0, 0].set_title('Demand')
         axs[0, 0].set_xlabel('Time')
         axs[0, 0].set_ylabel('Power (MW)')
@@ -848,3 +848,12 @@ class UnifiedMetricsHandler:
         
         if self.logger:
             self.logger.debug(f"Updated dispatch level: {dispatch_level:.4f}")
+
+    def set_demand_data_raw(self, demand_data: Dict[float, float]) -> None:
+        """
+        Store raw demand data points for visualization.
+        
+        Args:
+            demand_data: Dictionary mapping time fractions to demand values
+        """
+        self.demand_data_raw = demand_data
