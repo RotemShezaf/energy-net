@@ -7,10 +7,10 @@ components into a single, sequential simulation.
 
 Key responsibilities:
 1. Managing both ISO and PCS components in a unified timeline
-2. Processing actions from both agents in the correct sequence
+2. Processing actions from both trained_models in the correct sequence
 3. Tracking shared state variables and energy exchanges
-4. Calculating rewards for both agents
-5. Generating observations for both agents
+4. Calculating rewards for both trained_models
+5. Generating observations for both trained_models
 6. Providing direct access to comprehensive metrics
 
 The controller follows a sequential flow where:
@@ -64,7 +64,7 @@ class EnergyNetController:
     eliminating the need for manual transfers between separate environments.
     
     Key features:
-    - Unified observation and action spaces for both agents
+    - Unified observation and action spaces for both trained_models
     - Sequential processing of agent actions
     - Direct access to comprehensive metrics
     - Shared state tracking for consistent simulation
@@ -320,7 +320,7 @@ class EnergyNetController:
             return CostReward()
 
     def _create_observation_spaces(self):
-        """Create observation spaces for both agents"""
+        """Create observation spaces for both trained_models"""
         # ISO observation space
         iso_obs_config = self.iso_config.get('observation_space', {})
         time_config = iso_obs_config.get('time', {})
@@ -382,7 +382,7 @@ class EnergyNetController:
         self.logger.info(f"PCS observation space: {self.pcs_observation_space}")
 
     def _create_action_spaces(self):
-        """Create action spaces for both agents"""
+        """Create action spaces for both trained_models"""
         # ISO action space based on pricing strategy
         self.iso_action_space = self.pricing_strategy.create_action_space(
             use_dispatch_action=self.use_dispatch_action
@@ -414,7 +414,7 @@ class EnergyNetController:
             
         Returns:
             Tuple containing:
-            - Initial observations for both agents
+            - Initial observations for both trained_models
             - Info dictionary with initial state information
         """
         # Reset random generator if seed is provided
@@ -508,7 +508,7 @@ class EnergyNetController:
                 f"battery={self.battery_level:.2f}, prices: buy=${self.iso_buy_price:.2f}, sell=${self.iso_sell_price:.2f}"
             )
         
-        # Return observation for both agents, rewards, termination flags, and info
+        # Return observation for both trained_models, rewards, termination flags, and info
         return self._get_obs(), (iso_reward, pcs_reward), self.terminated, self.truncated, info
 
     def _process_iso_action(self, iso_action):
@@ -790,7 +790,7 @@ class EnergyNetController:
         # Calculate time_step for energy conversion
         time_step = self.time_step_duration / self.env_config['time']['minutes_per_day']
         
-        # Add more detailed metrics for both agents
+        # Add more detailed metrics for both trained_models
         info.update({
             # ISO specific info
             'iso_buy_price': self.iso_buy_price,
@@ -830,7 +830,7 @@ class EnergyNetController:
         return info
 
     def get_metrics(self):
-        """Get comprehensive metrics for both agents"""
+        """Get comprehensive metrics for both trained_models"""
         return self.metrics.get_metrics()
 
     def get_iso_observation_space(self):
@@ -851,10 +851,10 @@ class EnergyNetController:
 
     def _get_obs(self):
         """
-        Get observations for both ISO and PCS agents.
+        Get observations for both ISO and PCS trained_models.
         
         Returns:
-            tuple: (iso_obs, pcs_obs) - observations for both agents
+            tuple: (iso_obs, pcs_obs) - observations for both trained_models
         """
         iso_obs = self._get_iso_observation()
         pcs_obs = self._get_pcs_observation()

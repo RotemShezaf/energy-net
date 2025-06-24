@@ -42,7 +42,7 @@ class OrderEnforcingParallelWrapper(BaseParallelWrapper):
                 "infos",
                 "agent_selection",
                 "num_agents",
-                "agents",
+                "trained_models",
             }
             and not self._has_reset
         ):

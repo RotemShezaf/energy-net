@@ -416,7 +416,7 @@ class TestEnergyNetEnv(unittest.TestCase):
         self.assertIsInstance(self.env.observation_space, spaces.Dict)
         self.assertIsInstance(self.env.action_space, spaces.Dict)
         
-        # Check that the spaces contain entries for both agents
+        # Check that the spaces contain entries for both trained_models
         self.assertIn('iso', self.env.observation_space.spaces)
         self.assertIn('pcs', self.env.observation_space.spaces)
         self.assertIn('iso', self.env.action_space.spaces)
@@ -434,7 +434,7 @@ class TestEnergyNetEnv(unittest.TestCase):
         obs, info = self.env.reset()
         
         # Check that reset returns a tuple of (observation, info)
-        self.assertIsInstance(obs, dict)  # Should return observations for both agents
+        self.assertIsInstance(obs, dict)  # Should return observations for both trained_models
         self.assertIn('iso', obs)
         self.assertIn('pcs', obs)
         self.assertIsInstance(info, dict)

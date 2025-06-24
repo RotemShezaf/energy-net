@@ -74,7 +74,7 @@ class StableBaselines3RewardWrapper(RewardWrapper):
         self.env: EnergyNetV0
 
     def reward(self, reward: Dict[str, float]) -> float:
-        """Returns average reward across all agents."""
+        """Returns average reward across all trained_models."""
         if isinstance(reward, dict):
             return np.mean(list(reward.values()))
         return reward

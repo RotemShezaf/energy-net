@@ -19,14 +19,14 @@ def assign_indexes(dict):
 
 def observation_seperator(observation:dict[str, np.ndarray]):
     """
-    Seperates the observation into the agents's observation.
+    Seperates the observation into the trained_models's observation.
 
     Parameters:
-    observation (dict): The observation of all agents.
-    agents (str): The agents to get the observation for.
+    observation (dict): The observation of all trained_models.
+    trained_models (str): The trained_models to get the observation for.
 
     Returns:
-    dict: The observation of the agents.
+    dict: The observation of the trained_models.
     """
 
     return [observation[name] for name in observation.keys()]

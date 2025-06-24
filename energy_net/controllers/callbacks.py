@@ -315,7 +315,7 @@ class ActionTrackingCallback(BaseCallback):
             steps = range(len(episode_data))
             pcs_actions = [d.get('pcs_actions', []) for d in episode_data]
             
-            # Check if pcs_actions is a list of lists (multiple agents)
+            # Check if pcs_actions is a list of lists (multiple trained_models)
             if pcs_actions and isinstance(pcs_actions[0], list) and len(pcs_actions[0]) > 0:
                 for agent_idx in range(len(pcs_actions[0])):
                     agent_actions = [step_actions[agent_idx] if isinstance(step_actions, list) and len(step_actions) > agent_idx else 0.0 

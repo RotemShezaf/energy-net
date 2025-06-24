@@ -5,7 +5,7 @@ import numpy as np
 
 class SingleAgentParallelEnvToGymWrapper(gym.Env):
     """
-    A wrapper for single-agents parallel environments aligning the environments'
+    A wrapper for single-trained_models parallel environments aligning the environments'
     API with OpenAI Gym.
     """
     # gym API class variables
@@ -15,7 +15,7 @@ class SingleAgentParallelEnvToGymWrapper(gym.Env):
     def __init__(self, env):
         super().__init__(env)
 
-        # assert single agents environment
+        # assert single trained_models environment
         assert len(env.possible_agents) == 1
 
     def reset(self, **kwargs):
@@ -35,7 +35,7 @@ class SingleAgentParallelEnvToGymWrapper(gym.Env):
             infos = {k: {} for k in obs.keys()}
 
         # return the single entry value as is.
-        # no need for the key (only one agents)
+        # no need for the key (only one trained_models)
         return next(iter(obs.values())), next(iter(infos.values()))
 
     def step(self, action):
@@ -47,12 +47,12 @@ class SingleAgentParallelEnvToGymWrapper(gym.Env):
 
     @property  # make property for gym-like access
     def action_space(self, _=None):  # ignore second argument in API
-        # get action space of the single agents
+        # get action space of the single trained_models
         return self._flatten_action_space(self.env.action_space(self.env.possible_agents[0]))
 
     @property  # make property for gym-like access
     def observation_space(self, _=None):  # ignore second argument in API
-        # get observation space of the single agents
+        # get observation space of the single trained_models
         return self.env.observation_space(self.env.possible_agents[0])
 
     def seed(self, seed=None):

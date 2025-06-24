@@ -6,11 +6,11 @@ in the unified EnergyNet environment. It handles all calculations related to:
 - Grid state metrics (demand, shortfall, dispatch)
 - Battery state metrics (level, energy exchange)
 - Cost and revenue calculations
-- Reward computations for both agents
+- Reward computations for both trained_models
 - Comprehensive metrics tracking and reporting
 
 By unifying the metrics handling in a single module, we ensure consistency
-between the metrics reported for both agents and simplify the data flow in
+between the metrics reported for both trained_models and simplify the data flow in
 the unified simulation.
 """
 
@@ -31,7 +31,7 @@ class UnifiedMetricsHandler:
     provide a single point of truth for all metrics in the unified simulation. It:
     
     1. Tracks all relevant state variables for both ISO and PCS
-    2. Calculates costs and revenues for both agents
+    2. Calculates costs and revenues for both trained_models
     3. Provides reward calculations based on configurable parameters
     4. Maintains historical metrics for analysis and visualization
     5. Generates comprehensive info dictionaries for monitoring
@@ -524,7 +524,7 @@ class UnifiedMetricsHandler:
     
     def get_metrics(self) -> Dict[str, Any]:
         """
-        Get comprehensive metrics for both agents.
+        Get comprehensive metrics for both trained_models.
         
         Returns:
             Dictionary containing metrics for ISO, PCS, and shared metrics
@@ -569,7 +569,7 @@ class UnifiedMetricsHandler:
         Get summary statistics for the current episode.
         
         Returns:
-            Dictionary containing summary metrics for both agents
+            Dictionary containing summary metrics for both trained_models
         """
         # Mark episode as complete
         self.episode_count += 1

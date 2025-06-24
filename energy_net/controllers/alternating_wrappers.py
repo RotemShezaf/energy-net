@@ -1,5 +1,5 @@
 """
-Environment wrappers for alternating training of ISO and PCS agents.
+Environment wrappers for alternating training of ISO and PCS trained_models.
 
 These wrappers convert the multi-agent EnergyNetV0 environment into
 single-agent environments suitable for training with RL Zoo. They handle

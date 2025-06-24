@@ -1,19 +1,19 @@
 """
 Energy Net V0 Environment
 
-A unified multi-agent environment that integrates both the ISO and PCS agents
+A unified multi-agent environment that integrates both the ISO and PCS trained_models
 into a single simulation. This environment follows the multi-agent extension
 of the Gym interface, where step() takes multiple actions and returns multiple
 observations, rewards, and done flags.
 
 Key features:
-1. Integrated controller for both ISO and PCS agents
+1. Integrated controller for both ISO and PCS trained_models
 2. Sequential processing of agent actions
 3. Single timeline and shared state management
 4. Direct access to comprehensive metrics
 
 This environment serves as the main interface between RL algorithms and the
-underlying energy net simulation, enabling the training of agents that can
+underlying energy net simulation, enabling the training of trained_models that can
 efficiently manage electricity markets and battery storage.
 """
 
@@ -33,9 +33,9 @@ class EnergyNetV0(gym.Env):
     """
     Multi-agent environment for simulating energy grid dynamics.
     
-    This environment integrates both ISO and PCS agents into a single simulation,
+    This environment integrates both ISO and PCS trained_models into a single simulation,
     following a multi-agent extension of the Gym interface where step() takes multiple
-    actions and returns observations, rewards, and done flags for all agents.
+    actions and returns observations, rewards, and done flags for all trained_models.
     
     The environment uses a unified EnergyNetController to manage the sequential
     simulation, where:
@@ -151,7 +151,7 @@ class EnergyNetV0(gym.Env):
             
         Returns:
             Tuple containing:
-            - Initial observations for both agents in a dict
+            - Initial observations for both trained_models in a dict
             - Info dictionary with initial state information
         """
         observations, info = self.controller.reset(seed=seed, options=options)
@@ -220,10 +220,10 @@ class EnergyNetV0(gym.Env):
 
     def get_metrics(self):
         """
-        Get comprehensive metrics for both agents.
+        Get comprehensive metrics for both trained_models.
         
         Returns:
-            Dict containing metrics for both agents and shared metrics
+            Dict containing metrics for both trained_models and shared metrics
         """
         return self.controller.get_metrics()
     
