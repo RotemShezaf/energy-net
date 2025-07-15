@@ -10,7 +10,7 @@ import gymnasium as gym
 from stable_baselines3 import PPO, TD3
 from stable_baselines3.common.monitor import Monitor
 
-from energy_net.env import EnergyNetV0
+from energy_net.envs import EnergyNetV0
 
 
 def make_pcs_env_zoo(
