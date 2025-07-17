@@ -19,6 +19,7 @@ def make_pcs_env_zoo(
     log_dir="logs",
     use_dispatch_action=False,
     dispatch_strategy="PROPORTIONAL",
+    iso_policy_hyperparams_path=None,
     monitor=True,
     seed=None,
     **kwargs
@@ -54,18 +55,36 @@ def make_pcs_env_zoo(
     env_kwargs.update(kwargs)
     
     env = EnergyNetV0(**env_kwargs)
-    
-    # Load ISO policy if provided
-    iso_policy = None
+
     if iso_policy_path:
+        # Load ISO policy if provided
+        iso_policy = None
+        import yaml
         try:
+            # Load hyperparameters from YAML
+            learning_rate = 1e-4  # Default fallback
+            if iso_policy_hyperparams_path:
+                with open(iso_policy_hyperparams_path, 'r') as f:
+                    params = yaml.safe_load(f)
+
+
+                # Extract and convert learning_rate if present
+                if 'PCS-RLZoo-v0' in params and 'learning_rate' in params['PCS-RLZoo-v0']:
+                    lr_val = params['PCS-RLZoo-v0']['learning_rate']
+                    if isinstance(lr_val, str) and lr_val.startswith('lin_'):
+                        learning_rate = float(lr_val.replace('lin_', ''))
+                    elif isinstance(lr_val, (float, int)):
+                        learning_rate = lr_val
+            custom_objects = {'learning_rate': learning_rate}
             print(f"Loading ISO policy from {iso_policy_path}")
             # Determine algorithm type from path
+            breakpoint()
             if 'td3' in iso_policy_path.lower():
-                iso_policy = TD3.load(iso_policy_path)
+
+                iso_policy = TD3.load(iso_policy_path, custom_objects= custom_object)
                 print("Loaded TD3 ISO policy")
             else:
-                iso_policy = PPO.load(iso_policy_path)
+                iso_policy = PPO.load(iso_policy_path, custom_objects= custom_objects)
                 print("Loaded PPO ISO policy")
         except Exception as e:
             print(f"Error loading ISO policy: {e}")
@@ -82,6 +101,6 @@ def make_pcs_env_zoo(
     
     # Set random seed if provided
     if seed is not None:
-        env.seed(seed)
+        env.reset(seed = seed)
     
     return env 

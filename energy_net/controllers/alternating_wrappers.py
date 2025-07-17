@@ -503,6 +503,7 @@ class PCSEnvWrapper(gym.Wrapper):
         else:
             # Default action (mid-range price)
             iso_action = np.zeros(self.unwrapped.action_space["iso"].shape)
+
             
             # Set a reasonable default dispatch value if needed
             if len(iso_action) > 2 and hasattr(self.unwrapped, "controller") and hasattr(self.unwrapped.controller, "use_dispatch_action") and self.unwrapped.controller.use_dispatch_action:
@@ -513,7 +514,7 @@ class PCSEnvWrapper(gym.Wrapper):
             self.logger.debug(f"PCSEnvWrapper using default ISO action: {iso_action}")
         
         # (Removed manual controller._process_iso_action to avoid double processing)
-        
+
         # Create joint action dict - ISO must go first!
         action_dict = {
             "iso": iso_action,

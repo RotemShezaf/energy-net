@@ -183,7 +183,6 @@ class EnergyNetV0(gym.Env):
         # Extract actions from dict
         iso_action = action_dict["iso"]
         pcs_action = action_dict["pcs"]
-        
         # Execute step on the controller
         # New return format: observations, rewards, terminated, truncated, info
         observations, rewards, terminated, truncated, info = self.controller.step(iso_action, pcs_action)
