@@ -152,6 +152,7 @@ class PCSUnit(CompositeGridEntity):
         # Assuming the identifier for ProductionUnit is 'ProductionUnit_1' or similar
         production_unit = next((entity for key, entity in self.sub_entities.items()
                                 if isinstance(entity, ProductionUnit)), None)
+
         if production_unit:
             self.logger.debug(f"Retrieving self-production: {production_unit.get_state()} MWh")
             return production_unit.get_state()

@@ -4,7 +4,7 @@ PCS Environment Factory for RL-Baselines3-Zoo integration.
 This module provides factory functions that create PCS-focused environments
 wrapped appropriately for training with RL-Baselines3-Zoo.
 """
-
+import numpy as np
 import os
 import gymnasium as gym
 from stable_baselines3 import PPO, TD3
@@ -12,7 +12,7 @@ from stable_baselines3.common.monitor import Monitor
 
 from energy_net.envs import EnergyNetV0
 
-
+import torch
 def make_pcs_env_zoo(
     norm_path=None,
     iso_policy_path=None,
@@ -78,13 +78,22 @@ def make_pcs_env_zoo(
             custom_objects = {'learning_rate': learning_rate}
             print(f"Loading ISO policy from {iso_policy_path}")
             # Determine algorithm type from path
-            breakpoint()
             if 'td3' in iso_policy_path.lower():
 
                 iso_policy = TD3.load(iso_policy_path, custom_objects= custom_object)
                 print("Loaded TD3 ISO policy")
             else:
-                iso_policy = PPO.load(iso_policy_path, custom_objects= custom_objects)
+
+                iso_policy = PPO.load(iso_policy_path)
+                #for name, param in iso_policy.policy.named_parameters():
+                #    print(name, "min:", param.data.min(), "max:", param.data.max())
+                #breakpoint()
+                #array = np.array([0, 0, 0])
+                #array = array.astype(np.float64)
+                #obs_tensor = torch.tensor([[0, 0, 0]], dtype=torch.float64)
+                #breakpoint()
+                #output = iso_policy.policy(obs_tensor)
+                #result = iso_policy.predict(array)
                 print("Loaded PPO ISO policy")
         except Exception as e:
             print(f"Error loading ISO policy: {e}")
