@@ -487,15 +487,17 @@ class PCSEnvWrapper(gym.Wrapper):
         # Get ISO action from policy or use default action
         if self.iso_policy is not None:
             # Convert to batch format for policy prediction
-            iso_obs_batch = np.array([self.last_iso_obs], dtype=np.float32)
+            iso_obs_batch = np.array([self.last_iso_obs]
+            #try to debug shape issues
+            #iso_obs_batch = np.array([self.last_iso_obs], dtype=np.float32)
             
             # Get policy output (normalized) and apply epsilon-greedy
-            breakpoint()
+            #breakpoint()
             raw_action, _ = self.iso_policy.predict(
                 iso_obs_batch,
                 deterministic=self.eval_mode  # Deterministic in eval mode
             )
-            breakpoint()
+            #breakpoint()
             norm_action = raw_action[0]
             if not self.eval_mode and np.random.rand() < self.epsilon:
                 self.logger.debug(f"Epsilon-greedy: randomizing ISO action (eps={self.epsilon})")
